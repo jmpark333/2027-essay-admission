@@ -357,6 +357,16 @@ tbody tr:last-child td { border-bottom: none; }
   th { font-size: 0.7rem; white-space: normal; }
   .date-cell { white-space: normal; }
   .univ-name { white-space: normal; }
+  .month-card { padding: 0.75rem; overflow: hidden; }
+  .day { min-height: 36px; font-size: 0.65rem; }
+  .day.has-exam::after,
+  .day.has-deadline::after,
+  .day.has-suneung::after,
+  .day.has-result::after {
+    font-size: 0.45rem;
+    padding: 0px 2px;
+  }
+  .weekdays { font-size: 0.6rem; }
 }
 </style>
 </head>

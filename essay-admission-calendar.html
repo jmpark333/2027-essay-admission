@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2027학년도 논술전형 일정 달력</title>
+<style>
+:root {
+  --bg: #0f1117;
+  --surface: #1a1d27;
+  --surface-alt: #222633;
+  --border: #2e3344;
+  --text: #e4e6f0;
+  --text-muted: #8b90a5;
+  --accent: #6366f1;
+  --accent-soft: rgba(99, 102, 241, 0.15);
+  --danger: #ef4444;
+  --success: #22c55e;
+  --warning: #f59e0b;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Apple SD Gothic Neo', 'Pretendard', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  padding: 2rem 1.5rem;
+  line-height: 1.6;
+}
+.container { max-width: 1400px; margin: 0 auto; }
+header { text-align: center; margin-bottom: 2.5rem; }
+header h1 {
+  font-size: 2rem;
+  font-weight: 800;
+  background: linear-gradient(135deg, #818cf8, #c084fc, #f472b6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 0.5rem;
+}
+header p { color: var(--text-muted); font-size: 0.95rem; }
+
+/* Filter chips */
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+  margin-bottom: 2rem;
+}
+.filter-chip {
+  padding: 0.4rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  user-select: none;
+}
+.filter-chip:hover { border-color: var(--accent); color: var(--text); }
+.filter-chip.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+
+/* Calendar grid */
+.calendar-section { margin-bottom: 3rem; }
+.calendar-section h2 {
+  font-size: 1.3rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+  padding-left: 0.75rem;
+  border-left: 3px solid var(--accent);
+}
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 1.5rem;
+}
+.month-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.25rem;
+}
+.month-header {
+  font-size: 1.1rem;
+  font-weight: 700;
+  text-align: center;
+  margin-bottom: 1rem;
+  color: var(--text);
+}
+.month-header .month-label { color: var(--accent); }
+.weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  text-align: center;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+}
+.weekdays .sun { color: #f87171; }
+.weekdays .sat { color: #60a5fa; }
+.days {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+.day {
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 0.2rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  position: relative;
+  min-height: 48px;
+  background: transparent;
+  transition: background 0.15s;
+}
+.day:hover { background: var(--surface-alt); }
+.day.empty { pointer-events: none; }
+.day .date-num { z-index: 1; }
+.day.sun .date-num { color: #f87171; }
+.day.sat .date-num { color: #60a5fa; }
+.day.other-month .date-num { color: var(--text-muted); opacity: 0.3; }
+
+/* Event markers */
+.day.has-exam {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+}
+.day.has-exam::after {
+  content: '논술';
+  font-size: 0.55rem;
+  background: var(--danger);
+  color: white;
+  padding: 1px 4px;
+  border-radius: 3px;
+  margin-top: 2px;
+  font-weight: 700;
+}
+.day.has-deadline {
+  background: rgba(99, 102, 241, 0.12);
+  border: 1px solid rgba(99, 102, 241, 0.4);
+}
+.day.has-deadline::after {
+  content: '원서';
+  font-size: 0.55rem;
+  background: var(--accent);
+  color: white;
+  padding: 1px 4px;
+  border-radius: 3px;
+  margin-top: 2px;
+  font-weight: 700;
+}
+.day.has-suneung {
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.5);
+}
+.day.has-suneung::after {
+  content: '수능';
+  font-size: 0.55rem;
+  background: var(--warning);
+  color: #000;
+  padding: 1px 4px;
+  border-radius: 3px;
+  margin-top: 2px;
+  font-weight: 700;
+}
+.day.has-result {
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.4);
+}
+.day.has-result::after {
+  content: '발표';
+  font-size: 0.55rem;
+  background: var(--success);
+  color: #000;
+  padding: 1px 4px;
+  border-radius: 3px;
+  margin-top: 2px;
+  font-weight: 700;
+}
+
+/* Tooltip */
+.day[data-tooltip]:hover::before {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1f2937;
+  color: white;
+  padding: 0.4rem 0.6rem;
+  border-radius: 6px;
+  font-size: 0.7rem;
+  white-space: nowrap;
+  z-index: 100;
+  border: 1px solid var(--border);
+  pointer-events: none;
+}
+
+/* Timeline bar */
+.timeline-section { margin-bottom: 3rem; }
+.timeline-section h2 {
+  font-size: 1.3rem;
+  font-weight: 700;
+  margin-bottom: 1.5rem;
+  padding-left: 0.75rem;
+  border-left: 3px solid var(--accent);
+}
+.timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.timeline-row {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 1rem;
+  align-items: center;
+}
+.timeline-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-align: right;
+  padding-right: 0.5rem;
+}
+.timeline-track {
+  display: flex;
+  gap: 2px;
+  height: 28px;
+  position: relative;
+  background: var(--surface);
+  border-radius: 6px;
+  padding: 3px;
+}
+.timeline-marker {
+  height: 100%;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: white;
+  min-width: 4px;
+  transition: flex 0.2s;
+  cursor: default;
+}
+.timeline-marker:hover { filter: brightness(1.2); }
+.m-exam { background: var(--danger); }
+.m-deadline { background: var(--accent); }
+.m-suneung { background: var(--warning); color: #000; }
+.m-result { background: var(--success); color: #000; }
+
+/* Legend */
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: center;
+  margin-bottom: 2rem;
+  padding: 1rem;
+  background: var(--surface);
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+.legend-dot.exam { background: var(--danger); }
+.legend-dot.deadline { background: var(--accent); }
+.legend-dot.suneung { background: var(--warning); }
+.legend-dot.result { background: var(--success); }
+
+/* Table */
+.table-section { margin-bottom: 3rem; }
+.table-section h2 {
+  font-size: 1.3rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+  padding-left: 0.75rem;
+  border-left: 3px solid var(--accent);
+}
+.table-wrap {
+  overflow-x: auto;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+thead { background: var(--surface-alt); }
+th {
+  padding: 0.85rem 0.75rem;
+  text-align: left;
+  font-weight: 700;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  border-bottom: 2px solid var(--border);
+  white-space: nowrap;
+}
+td {
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  vertical-align: top;
+}
+tbody tr:hover { background: rgba(99, 102, 241, 0.05); }
+tbody tr:last-child td { border-bottom: none; }
+.univ-name {
+  font-weight: 700;
+  color: var(--accent);
+  white-space: nowrap;
+}
+.date-cell { white-space: nowrap; font-weight: 600; }
+.date-cell .pre { color: #f87171; }
+.date-cell .post { color: #60a5fa; }
+.badge {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  margin-left: 0.3rem;
+}
+.badge-none { background: rgba(34, 197, 94, 0.15); color: #4ade80; }
+.badge-have { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
+.badge-partial { background: rgba(99, 102, 241, 0.15); color: #818cf8; }
+
+/* Responsive */
+@media (max-width: 768px) {
+  body { padding: 1rem 0.75rem; }
+  header h1 { font-size: 1.5rem; }
+  .calendar-grid { grid-template-columns: 1fr; }
+  .timeline-row { grid-template-columns: 100px 1fr; }
+  .timeline-label { font-size: 0.75rem; }
+  th, td { padding: 0.5rem; font-size: 0.75rem; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>2027학년도 논술전형 종합 가이드</h1>
+    <p>숭실대 · 중앙대 · 성균관대 · 경희대 · 아주대 · 한양대 · 서강대 · 이화여대 · 연세대</p>
+    <p style="margin-top:0.3rem;font-size:0.8rem;">기준일: 2026년 8월 30일 | 출처: 각 대학 2027학년도 모집요강</p>
+  </header>
+
+  <!-- Legend -->
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot deadline"></div>원서접수</div>
+    <div class="legend-item"><div class="legend-dot exam"></div>논술시험</div>
+    <div class="legend-item"><div class="legend-dot suneung"></div>수능</div>
+    <div class="legend-item"><div class="legend-dot result"></div>합격발표</div>
+  </div>
+
+  <!-- Filter -->
+  <div class="filters" id="filters">
+    <div class="filter-chip active" data-filter="all">전체</div>
+    <div class="filter-chip" data-filter="pre">수능 전 논술</div>
+    <div class="filter-chip" data-filter="post">수능 후 논술</div>
+    <div class="filter-chip" data-filter="nolimit">최저 없음</div>
+  </div>
+
+  <!-- Summary Table -->
+  <section class="table-section">
+    <h2>📊 대학별 논술전형 요약 비교표</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>대학</th>
+            <th>원서접수 기간</th>
+            <th>논술시험일</th>
+            <th>수능 최저기준</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="univ-name">연세대</td>
+            <td class="date-cell">9. 7.(월) ~ 9. 9.(수)</td>
+            <td class="date-cell">10. 10.(토) <span class="badge badge-pre">수능전</span></td>
+            <td><span class="badge badge-none">없음</span></td>
+          </tr>
+          <tr>
+            <td class="univ-name">중앙대</td>
+            <td class="date-cell">9. 8.(화) ~ 9. 11.(금)</td>
+            <td class="date-cell">창의형: <span class="pre">10. 11.(일)</span><br>일반형: <span class="post">11. 28~29</span></td>
+            <td>창의형: <span class="badge badge-none">없음</span><br>일반형: <span class="badge badge-have">3개 합 6</span></td>
+          </tr>
+          <tr>
+            <td class="univ-name">성균관대</td>
+            <td class="date-cell">9. 14.(월) ~ 9. 18.(금)</td>
+            <td class="date-cell"><span class="post">인문: 11. 21.(토)<br>자연: 11. 22.(일)</span></td>
+            <td><span class="badge badge-have">3개 합 5~6</span></td>
+          </tr>
+          <tr>
+            <td class="univ-name">서강대</td>
+            <td class="date-cell">9. 8.(화) ~ 9. 11.(금)</td>
+            <td class="date-cell"><span class="post">자연: 11. 21.(토)<br>인문: 11. 22.(일)</span></td>
+            <td><span class="badge badge-have">3개 합 7</span></td>
+          </tr>
+          <tr>
+            <td class="univ-name">경희대</td>
+            <td class="date-cell">9. 8.(화) ~ 9. 11.(금)</td>
+            <td class="date-cell"><span class="post">11. 21.(토) ~ 22.(일)</span></td>
+            <td><span class="badge badge-have">2개 합 5</span></td>
+          </tr>
+          <tr>
+            <td class="univ-name">숭실대</td>
+            <td class="date-cell">9. 8.(화) ~ 9. 11.(금)</td>
+            <td class="date-cell"><span class="post">11. 21.(토)</span></td>
+            <td><span class="badge badge-have">2개 합 6</span></td>
+          </tr>
+          <tr>
+            <td class="univ-name">한양대</td>
+            <td class="date-cell">9. 8.(화) ~ 9. 11.(금)</td>
+            <td class="date-cell"><span class="post">인문: 11. 28.(토)<br>자연: 11. 29.(일)</span></td>
+            <td><span class="badge badge-have">3개 합 7</span></td>
+          </tr>
+          <tr>
+            <td class="univ-name">이화여대</td>
+            <td class="date-cell">9. 8.(화) ~ 9. 10.(목)</td>
+            <td class="date-cell"><span class="post">인문: 11. 28.(토)<br>자연: 11. 29.(일)</span></td>
+            <td><span class="badge badge-have">2개 합 5</span></td>
+          </tr>
+          <tr>
+            <td class="univ-name">아주대</td>
+            <td class="date-cell">9. 7.(월) ~ 9. 11.(금)</td>
+            <td class="date-cell"><span class="post">자연: 12. 5.(토)<br>인문: 12. 6.(일)</span></td>
+            <td>일반: <span class="badge badge-none">없음</span><br>의/약: <span class="badge badge-have">3~4개 합 5~6</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Calendar -->
+  <section class="calendar-section">
+    <h2>📅 월별 일정 달력</h2>
+    <div class="calendar-grid" id="calendarGrid"></div>
+  </section>
+
+  <!-- Detail Cards -->
+  <section class="calendar-section">
+    <h2>📋 대학별 상세 일정</h2>
+    <div class="calendar-grid" id="detailGrid"></div>
+  </section>
+</div>
+
+<script>
+const events = {
+  deadlines: [
+    { name: '연세대', start: '2026-09-07', end: '2026-09-09', color: '#818cf8' },
+    { name: '아주대', start: '2026-09-07', end: '2026-09-11', color: '#f472b6' },
+    { name: '중앙대', start: '2026-09-08', end: '2026-09-11', color: '#fb923c' },
+    { name: '서강대', start: '2026-09-08', end: '2026-09-11', color: '#4ade80' },
+    { name: '경희대', start: '2026-09-08', end: '2026-09-11', color: '#fbbf24' },
+    { name: '숭실대', start: '2026-09-08', end: '2026-09-11', color: '#60a5fa' },
+    { name: '한양대', start: '2026-09-08', end: '2026-09-11', color: '#f87171' },
+    { name: '이화여대', start: '2026-09-08', end: '2026-09-10', color: '#c084fc' },
+    { name: '성균관대', start: '2026-09-14', end: '2026-09-18', color: '#2dd4bf' },
+  ],
+  exams: [
+    { name: '연세대', date: '2026-10-10', type: '수능전' },
+    { name: '중앙대(창의형)', date: '2026-10-11', type: '수능전' },
+    { name: '경희대', date: '2026-11-21', type: '수능후', end: '2026-11-22' },
+    { name: '성균관대(인문)', date: '2026-11-21', type: '수능후' },
+    { name: '서강대(자연)', date: '2026-11-21', type: '수능후' },
+    { name: '숭실대', date: '2026-11-21', type: '수능후' },
+    { name: '성균관대(자연)', date: '2026-11-22', type: '수능후' },
+    { name: '서강대(인문)', date: '2026-11-22', type: '수능후' },
+    { name: '중앙대(일반)', date: '2026-11-28', type: '수능후', end: '2026-11-29' },
+    { name: '한양대(인문)', date: '2026-11-28', type: '수능후' },
+    { name: '이화여대(인문)', date: '2026-11-28', type: '수능후' },
+    { name: '한양대(자연)', date: '2026-11-29', type: '수능후' },
+    { name: '이화여대(자연)', date: '2026-11-29', type: '수능후' },
+    { name: '아주대(자연)', date: '2026-12-05', type: '수능후' },
+    { name: '아주대(인문)', date: '2026-12-06', type: '수능후' },
+  ],
+  suneung: { date: '2026-11-19', label: '2027 수능' },
+  results: [
+    { name: '연세대', date: '2026-11-09' },
+    { name: '중앙대(창의형)', date: '2026-11-09' },
+    { name: '중앙대(일반)', date: '2026-12-20' },
+    { name: '경희대', date: '2026-12-18' },
+    { name: '성균관대', date: '2026-12-20' },
+    { name: '서강대', date: '2026-12-20' },
+    { name: '숭실대', date: '2026-12-18' },
+    { name: '한양대', date: '2026-12-20' },
+    { name: '이화여대', date: '2026-12-20' },
+    { name: '아주대', date: '2026-12-21' },
+  ]
+};
+
+const monthNames = ['9월', '10월', '11월', '12월'];
+const monthStart = [8, 9, 10, 11];
+const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
+
+function getEventsOnDate(dateStr) {
+  const evts = [];
+  events.deadlines.forEach(d => {
+    if (dateStr >= d.start && dateStr <= d.end) evts.push({ type: 'deadline', name: d.name });
+  });
+  events.exams.forEach(e => {
+    if (e.end) {
+      if (dateStr >= e.date && dateStr <= e.end) evts.push({ type: 'exam', name: e.name });
+    } else {
+      if (dateStr === e.date) evts.push({ type: 'exam', name: e.name });
+    }
+  });
+  if (events.suneung && dateStr === events.suneung.date) {
+    evts.push({ type: 'suneung', name: events.suneung.label });
+  }
+  events.results.forEach(r => {
+    if (dateStr === r.date) evts.push({ type: 'result', name: r.name });
+  });
+  return evts;
+}
+
+function pad(n) { return String(n).padStart(2, '0'); }
+function toDateStr(date) {
+  return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}`;
+}
+
+function buildCalendar() {
+  const grid = document.getElementById('calendarGrid');
+  grid.innerHTML = '';
+  monthNames.forEach((mName, idx) => {
+    const monthIdx = monthStart[idx];
+    const card = document.createElement('div');
+    card.className = 'month-card';
+    const header = document.createElement('div');
+    header.className = 'month-header';
+    header.innerHTML = `<span class="month-label">${mName}</span> 2026`;
+    card.appendChild(header);
+    const weekdays = document.createElement('div');
+    weekdays.className = 'weekdays';
+    dayNames.forEach((d, i) => {
+      const span = document.createElement('span');
+      span.textContent = d;
+      if (i === 0) span.classList.add('sun');
+      if (i === 6) span.classList.add('sat');
+      weekdays.appendChild(span);
+    });
+    card.appendChild(weekdays);
+    const daysGrid = document.createElement('div');
+    daysGrid.className = 'days';
+    const firstDay = new Date(2026, monthIdx, 1);
+    const lastDay = new Date(2026, monthIdx + 1, 0);
+    const startDow = firstDay.getDay();
+    for (let i = 0; i < startDow; i++) {
+      const empty = document.createElement('div');
+      empty.className = 'day empty';
+      daysGrid.appendChild(empty);
+    }
+    for (let d = 1; d <= lastDay.getDate(); d++) {
+      const date = new Date(2026, monthIdx, d);
+      const dateStr = toDateStr(date);
+      const evts = getEventsOnDate(dateStr);
+      const dow = date.getDay();
+      const cell = document.createElement('div');
+      cell.className = 'day';
+      if (dow === 0) cell.classList.add('sun');
+      if (dow === 6) cell.classList.add('sat');
+      const num = document.createElement('span');
+      num.className = 'date-num';
+      num.textContent = d;
+      cell.appendChild(num);
+      if (evts.some(e => e.type === 'suneung')) cell.classList.add('has-suneung');
+      else if (evts.some(e => e.type === 'exam')) cell.classList.add('has-exam');
+      else if (evts.some(e => e.type === 'deadline')) cell.classList.add('has-deadline');
+      else if (evts.some(e => e.type === 'result')) cell.classList.add('has-result');
+      if (evts.length > 0) {
+        const names = evts.map(e => {
+          const icon = e.type === 'exam' ? '🔴' : e.type === 'deadline' ? '🟣' : e.type === 'suneung' ? '🟡' : '🟢';
+          return `${icon} ${e.name}`;
+        }).join(' | ');
+        cell.setAttribute('data-tooltip', names);
+      }
+      daysGrid.appendChild(cell);
+    }
+    card.appendChild(daysGrid);
+    grid.appendChild(card);
+  });
+}
+
+const details = [
+  { name: '연세대', period: '9. 7.(월) ~ 9. 9.(수)', exam: '10. 10.(토)', limit: '없음', note: '순수 논술 100% 선발', color: '#818cf8', pdf: '2027학년도 연세대학교 서울캠퍼스 학부 신입학 수시모집요강.pdf' },
+  { name: '중앙대', period: '9. 8.(화) ~ 9. 11.(금)', exam: '창의형: 10.11.(일)\n일반형: 11.28~29', limit: '창의형: 없음\n일반형: 국·수·영·탐 중 3개 합 6\n약학: 4개 합 5\n의학: 4개 합 5', note: '창의형 신설 (수능전)', color: '#fb923c', pdf: '중앙대학교_2027학년도 수시모집요강_업로드용(최종).pdf' },
+  { name: '성균관대', period: '9. 14.(월) ~ 9. 18.(금)', exam: '인문: 11.21\n자연: 11.22', limit: '인문/사회/경영/자연 등:\n국·수·영·탐 중 3개 합 6\n글로벌/전기전기/반도체/컴공 등:\n3개 합 5\n의예: 4개 합 5', note: '계열별 차등 적용', color: '#2dd4bf', pdf: '[성균관대학교] 2027학년도 수시 모집요강.pdf' },
+  { name: '서강대', period: '9. 8.(화) ~ 9. 11.(금)', exam: '자연: 11.21\n인문: 11.22', limit: '전 계열: 국·수·영·탐 중\n3개 등급합 7 이한\n한국사 4등급 이내', note: '선택과목 구분 없음', color: '#4ade80', pdf: '2027학년도서강대학교수시모집요강.pdf' },
+  { name: '경희대', period: '9. 8.(화) ~ 9. 11.(금)', exam: '11.21 ~ 11.22', limit: '인문/자연/자율: 2개 합 5\n의예·한의예·치의·약: 3개 합 4\n예체능: 1개 이상 3등급 이내', note: '의약학 별도 기준 적용', color: '#fbbf24', pdf: '2027학년도 경희대학교 수시 모집요강-최종_20260826.pdf' },
+  { name: '숭실대', period: '9. 8.(화) ~ 9. 11.(금)', exam: '11. 21.(토)', limit: '전 계열: 국·수·영·탐 중\n2개 등급합 6 이내', note: '전 계열 당일 실시', color: '#60a5fa', pdf: '2027학년도 숭실대학교 수시모집요강.pdf' },
+  { name: '한양대', period: '9. 8.(화) ~ 9. 11.(금)', exam: '인문: 11.28\n자연: 11.29', limit: '전 계열: 3개 등급합 7\n의예: 3개 등급합 4', note: '의예과 기준 강화', color: '#f87171', pdf: '2027학년도 한양대학교 신입학 수시모집요강.pdf' },
+  { name: '이화여대', period: '9. 8.(화) ~ 9. 10.(목)', exam: '인문: 11.28\n자연: 11.29', limit: '인문: 국어 포함 2개 합 5\n자연: 수학 포함 2개 합 5\n의예: 4개 합 5\n약학: 4개 합 6\n스크랜튼: 3개 합 5', note: '계열별 포함 과목 지정', color: '#c084fc', pdf: '2027학년도이화여자대학교수시모집요강(게시용).pdf' },
+  { name: '아주대', period: '9. 7.(월) ~ 9. 11.(금)', exam: '자연: 12.5\n인문: 12.6', limit: '일반학과: 없음\n의학: 4개 등급합 6\n약학: 3개 등급합 5', note: '최후 논술 일정', color: '#f472b6', pdf: '2027학년도 아주대학교 수시 모집요강(수정 공고).pdf' },
+];
+
+function buildDetails() {
+  const grid = document.getElementById('detailGrid');
+  grid.innerHTML = '';
+  details.forEach(d => {
+    const card = document.createElement('div');
+    card.className = 'month-card';
+    card.style.borderTop = `3px solid ${d.color}`;
+    card.innerHTML = `
+      <div style="font-size:1.1rem;font-weight:800;margin-bottom:0.75rem;color:${d.color}">${d.name}</div>
+      <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:0.3rem;">📝 원서접수</div>
+      <div style="font-size:0.9rem;font-weight:600;margin-bottom:0.6rem;">${d.period}</div>
+      <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:0.3rem;">✏️ 논술시험</div>
+      <div style="font-size:0.9rem;font-weight:600;margin-bottom:0.6rem;white-space:pre-line;">${d.exam}</div>
+      <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:0.3rem;">🎯 최저기준</div>
+      <div style="font-size:0.9rem;font-weight:600;margin-bottom:0.6rem;white-space:pre-line;">${d.limit}</div>
+      <div style="font-size:0.75rem;color:var(--text-muted);padding-top:0.5rem;border-top:1px solid var(--border);">💡 ${d.note}</div>
+      ${d.pdf ? `<a href="${d.pdf}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:0.3rem;margin-top:0.6rem;padding:0.35rem 0.7rem;background:var(--accent-soft);border:1px solid var(--accent);border-radius:6px;color:var(--accent);font-size:0.75rem;font-weight:600;text-decoration:none;transition:all 0.2s;" onmouseover="this.style.background='var(--accent)';this.style.color='white'" onmouseout="this.style.background='var(--accent-soft)';this.style.color='var(--accent)'">📄 수시모집요강 PDF</a>` : ''}
+    `;
+    grid.appendChild(card);
+  });
+}
+
+function setupFilters() {
+  const chips = document.querySelectorAll('.filter-chip');
+  chips.forEach(chip => {
+    chip.addEventListener('click', () => {
+      chips.forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      filterView(chip.dataset.filter);
+    });
+  });
+}
+
+function filterView(filter) {
+  const rows = document.querySelectorAll('.timeline-row');
+  const allUnivs = ['연세대', '중앙대', '성균관대', '서강대', '경희대', '숭실대', '한양대', '이화여대', '아주대'];
+  rows.forEach(row => {
+    const label = row.querySelector('.timeline-label');
+    if (!label) return;
+    const univ = label.textContent;
+    if (univ === '수능') { row.style.display = 'grid'; return; }
+    const idx = allUnivs.indexOf(univ);
+    if (idx === -1) { row.style.display = 'grid'; return; }
+    if (filter === 'all') row.style.display = 'grid';
+    else if (filter === 'pre') row.style.display = ['연세대', '중앙대'].includes(univ) ? 'grid' : 'none';
+    else if (filter === 'post') row.style.display = ['연세대', '중앙대'].includes(univ) ? 'none' : 'grid';
+    else if (filter === 'nolimit') row.style.display = ['연세대', '아주대'].includes(univ) ? 'grid' : 'none';
+  });
+  const cards = document.querySelectorAll('#detailGrid .month-card');
+  cards.forEach((card, i) => {
+    const univ = allUnivs[i];
+    if (!univ) return;
+    if (filter === 'all') card.style.display = 'block';
+    else if (filter === 'pre') card.style.display = ['연세대', '중앙대'].includes(univ) ? 'block' : 'none';
+    else if (filter === 'post') card.style.display = ['연세대', '중앙대'].includes(univ) ? 'none' : 'block';
+    else if (filter === 'nolimit') card.style.display = ['연세대', '아주대'].includes(univ) ? 'block' : 'none';
+  });
+}
+
+buildCalendar();
+buildDetails();
+setupFilters();
+</script>
+</body>
+</html>

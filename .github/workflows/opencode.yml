@@ -142,6 +142,8 @@ jobs:
               }
             );
 
+            console.log("Nous API status: " + res.status);
+
             if (!res.ok) {
               const err = await res.text();
               core.setFailed("Nous API error " + res.status + ": " + err);
@@ -149,10 +151,16 @@ jobs:
             }
 
             const data = await res.json();
+
+            // Log full API response for debugging
+            console.log("=== FULL API RESPONSE ===");
+            console.log(JSON.stringify(data, null, 2).substring(0, 3000));
+            console.log("=== END API RESPONSE ===");
+
             const rawReply = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || "";
 
             // Log for debugging
-            console.log("=== RAW AI RESPONSE ===");
+            console.log("=== RAW AI RESPONSE (length: " + rawReply.length + ") ===");
             console.log(rawReply);
             console.log("=== END RESPONSE ===");
 

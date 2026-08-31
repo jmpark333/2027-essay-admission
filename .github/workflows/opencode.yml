@@ -151,16 +151,30 @@ jobs:
             const data = await res.json();
             const rawReply = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || "";
 
-            // Parse JSON from response (handle markdown code blocks)
+            // Log for debugging
+            console.log("=== RAW AI RESPONSE ===");
+            console.log(rawReply);
+            console.log("=== END RESPONSE ===");
+
+            // Parse JSON from response (handle markdown code blocks, trailing text)
             let parsed;
             try {
               let jsonStr = rawReply.trim();
+              // Try code block first
               const codeBlockMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
               if (codeBlockMatch) {
                 jsonStr = codeBlockMatch[1].trim();
+              } else {
+                // Try to extract JSON object from surrounding text
+                const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
+                if (jsonMatch) {
+                  jsonStr = jsonMatch[0];
+                }
               }
               parsed = JSON.parse(jsonStr);
             } catch (e) {
+              console.error("JSON parse error: " + e.message);
+              console.error("Raw response was: " + rawReply.substring(0, 1000));
               core.setFailed("Failed to parse JSON from AI response: " + rawReply.substring(0, 500));
               return;
             }

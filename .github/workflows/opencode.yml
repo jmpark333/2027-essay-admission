@@ -7,7 +7,7 @@ on:
     types: [created]
 
 permissions:
-  contents: read
+  contents: write
   issues: write
   pull-requests: write
 
@@ -26,6 +26,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
       - name: React to comment (/oc)
         uses: actions/github-script@v7
@@ -38,21 +40,8 @@ jobs:
               content: "eyes",
             });
 
-      - name: Gather repo context (/oc)
-        id: ctx-oc
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const files = await github.rest.repos.getContent({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              path: ".",
-            });
-            const fileList = files.data.map(f => (f.type === "dir" ? "[dir] " : "") + f.name).join("\n");
-            core.setOutput("fileList", fileList);
-            core.setOutput("repo", context.repo.owner + "/" + context.repo.repo);
-
       - name: Call Nous API (/oc)
+        id: api-oc
         uses: actions/github-script@v7
         with:
           script: |
@@ -62,35 +51,72 @@ jobs:
               ? context.payload.issue.number
               : context.payload.pull_request?.number;
 
-            const fileList = process.env.FILE_LIST;
-            const repo = process.env.REPO;
+            const filesResp = await github.rest.repos.getContent({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              path: ".",
+            });
+            const fileList = filesResp.data
+              .map(f => (f.type === "dir" ? "[dir] " : "") + f.name)
+              .join("\n");
+
+            let indexHtml = "";
+            try {
+              const idx = await github.rest.repos.getContent({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                path: "index.html",
+              });
+              indexHtml = Buffer.from(idx.data.content, "base64").toString("utf8");
+            } catch (e) {
+              indexHtml = "(index.html not found)";
+            }
 
             const systemPrompt = [
-              "You are a GitHub comment bot for the repository \"" + repo + "\".",
+              "You are a code-editing bot for the GitHub repository \"" + context.repo.owner + "/" + context.repo.repo + "\".",
               "",
               "WHAT THIS REPO IS:",
               "Static HTML site for 2027 Korean university essay admission calendar (2027학년도 논술전형 달력).",
-              "Main file: index.html — all calendar data is INLINE in JS objects (deadlines, exams, results arrays).",
               "",
-              "REPO FILES:",
+              "INDEX.HTML DATA STRUCTURE (inline JS):",
+              "- events.deadlines[]: { name, start(YYYY-MM-DD), end, color }",
+              "- events.exams[]: { name, date(YYYY-MM-DD), type, end? }",
+              "- events.results[]: { name, date(YYYY-MM-DD) }",
+              "- events.monthly[]: month-by-month schedule rendered in calendar view",
+              "",
+              "AVAILABLE FILES:",
               fileList,
               "",
-              "YOUR ROLE:",
-              "- Read the issue/PR comment and respond helpfully as a text comment only.",
-              "- You CANNOT push code, create PRs, edit files, or access external URLs/PDFs.",
-              "- NEVER claim you verified PDFs, checked websites, or made code changes.",
-              "- NEVER say \"PR 올리겠습니다\", \"수정하겠습니다\", \"확인했습니다\" unless literally true.",
+              "CURRENT INDEX.HTML CONTENT:",
+              indexHtml.substring(0, 8000),
+              indexHtml.length > 8000 ? "\n...[truncated, total " + indexHtml.length + " chars]" : "",
               "",
-              "WHEN USER ASKS TO FIX DATA (e.g. wrong dates):",
-              "1. Acknowledge the report",
-              "2. State the CURRENT value from repo data you can see",
-              "3. State the CORRECTED value the user provided (or mark as unverified if unsure)",
-              "4. Give the exact line/snippet to change",
+              "YOUR TASK:",
+              "The user wants to fix or modify data/code in this repo.",
+              "You MUST respond with ONLY a valid JSON object — no markdown, no explanation.",
               "",
-              "KEEP IT SHORT. 2-5 bullet points max. No filler.",
+              "RESPONSE FORMAT (strict JSON):",
+              "{",
+              "  \"explanation\": \"1-2 sentence summary of what you changed\",",
+              "  \"branch\": \"short-kebab-case-branch-name\",",
+              "  \"edits\": [",
+              "    {",
+              "      \"file\": \"index.html\",",
+              "      \"old\": \"exact string to find (must match exactly including whitespace)\",",
+              "      \"new\": \"replacement string\"",
+              "    }",
+              "  ]",
+              "}",
+              "",
+              "RULES:",
+              "- \"old\" must match the EXACT text in the file (copy-paste friendly)",
+              "- If multiple changes, include multiple objects in \"edits\" array",
+              "- Keep \"old\" as short as possible but unique within the file",
+              "- branch name: short, descriptive, kebab-case (e.g. \"fix-hanyang-date\")",
+              "- ONLY return the JSON object, no other text",
             ].join("\n");
 
-            const userPrompt = "A user wrote this " + (isIssue ? "issue comment" : "PR review comment") + ":\n\n\"" + commentBody + "\"\n\nRespond concisely as a helpful bot. Remember: you cannot edit code or access PDFs.";
+            const userPrompt = "User request:\n\n\"" + commentBody + "\"\n\nReturn the JSON edit plan.";
 
             const res = await fetch(
               "https://inference-api.nousresearch.com/v1/chat/completions",
@@ -107,6 +133,7 @@ jobs:
                     { role: "user", content: userPrompt },
                   ],
                   max_tokens: 2048,
+                  temperature: 0.3,
                 }),
               }
             );
@@ -118,33 +145,122 @@ jobs:
             }
 
             const data = await res.json();
-            const reply = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || "(no response)";
+            const rawReply = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || "";
 
-            const marker = "<!-- oc-bot -->";
-            const body = marker + "\n🤖 **OpenCode** responded:\n\n" + reply;
-
-            if (isIssue) {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: number,
-                body,
-              });
-            } else {
-              await github.rest.pulls.createReviewComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                pull_number: number,
-                body,
-                commit_id: context.payload.comment.commit_id,
-                path: context.payload.comment.path,
-                line: context.payload.comment.line ?? context.payload.comment.original_line,
-              });
+            // Parse JSON from response (handle markdown code blocks)
+            let parsed;
+            try {
+              let jsonStr = rawReply.trim();
+              const codeBlockMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+              if (codeBlockMatch) {
+                jsonStr = codeBlockMatch[1].trim();
+              }
+              parsed = JSON.parse(jsonStr);
+            } catch (e) {
+              core.setFailed("Failed to parse JSON from AI response: " + rawReply.substring(0, 500));
+              return;
             }
+
+            if (!parsed.edits || parsed.edits.length === 0) {
+              core.setFailed("No edits in AI response: " + JSON.stringify(parsed).substring(0, 500));
+              return;
+            }
+
+            core.setOutput("plan", JSON.stringify(parsed));
         env:
           NOUS_API_KEY: ${{ secrets.NOUS_API_KEY }}
-          FILE_LIST: ${{ steps.ctx-oc.outputs.fileList }}
-          REPO: ${{ steps.ctx-oc.outputs.repo }}
+
+      - name: Apply edits (/oc)
+        if: steps.api-oc.outputs.plan
+        shell: bash
+        run: |
+          PLAN='${{ steps.api-oc.outputs.plan }}'
+          echo "Plan: $PLAN"
+
+          # Apply each edit using node
+          node -e "
+            const plan = JSON.parse(process.env.PLAN);
+            const fs = require('fs');
+
+            for (const edit of plan.edits) {
+              const content = fs.readFileSync(edit.file, 'utf8');
+              if (!content.includes(edit.old)) {
+                console.error('ERROR: old text not found in ' + edit.file);
+                console.error('Looking for: ' + edit.old.substring(0, 100));
+                process.exit(1);
+              }
+              const newContent = content.replace(edit.old, edit.new);
+              fs.writeFileSync(edit.file, newContent);
+              console.log('Applied edit to ' + edit.file);
+            }
+            console.log('All edits applied successfully');
+          "
+        env:
+          PLAN: ${{ steps.api-oc.outputs.plan }}
+
+      - name: Create branch and commit (/oc)
+        if: steps.api-oc.outputs.plan
+        id: branch-oc
+        shell: bash
+        run: |
+          PLAN='${{ steps.api-oc.outputs.plan }}'
+          BRANCH=$(node -e "console.log(JSON.parse(process.env.PLAN).branch || 'oc-fix-$(date +%s)')")
+          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add -A
+          git commit -m "fix: apply /oc edits via OpenCode
+
+          Automated fix based on issue context.
+          Branch: $BRANCH"
+          git push origin "$BRANCH"
+        env:
+          PLAN: ${{ steps.api-oc.outputs.plan }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create PR (/oc)
+        if: steps.branch-oc.outputs.branch
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const plan = JSON.parse(process.env.PLAN);
+            const branch = process.env.BRANCH;
+            const isIssue = !!context.payload.issue;
+            const number = isIssue
+              ? context.payload.issue.number
+              : context.payload.pull_request?.number;
+
+            const pr = await github.rest.pulls.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: "fix: " + (plan.explanation || " edits via /oc"),
+              head: branch,
+              base: "main",
+              body: [
+                "## Summary",
+                plan.explanation || "Automated fix",
+                "",
+                "Changes:",
+                ...plan.edits.map(e => "- `" + e.file + "`: " + e.old.substring(0, 50) + " → " + e.new.substring(0, 50)),
+                "",
+                "Triggered by: #" + number,
+                "",
+                "---",
+                "*This PR was auto-generated by OpenCode bot*",
+              ].join("\n"),
+            });
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: number,
+              body: "🤖 OpenCode created PR #" + pr.data.number + " on branch `" + branch + "`\n\n" + (plan.explanation || ""),
+            });
+        env:
+          PLAN: ${{ steps.api-oc.outputs.plan }}
+          BRANCH: ${{ steps.branch-oc.outputs.branch }}
 
   cc:
     name: "Claude Code (/cc)"
@@ -158,6 +274,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
       - name: React to comment (/cc)
         uses: actions/github-script@v7
@@ -170,21 +288,8 @@ jobs:
               content: "eyes",
             });
 
-      - name: Gather repo context (/cc)
-        id: ctx-cc
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const files = await github.rest.repos.getContent({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              path: ".",
-            });
-            const fileList = files.data.map(f => (f.type === "dir" ? "[dir] " : "") + f.name).join("\n");
-            core.setOutput("fileList", fileList);
-            core.setOutput("repo", context.repo.owner + "/" + context.repo.repo);
-
       - name: Call Nous API (/cc)
+        id: api-cc
         uses: actions/github-script@v7
         with:
           script: |
@@ -194,35 +299,72 @@ jobs:
               ? context.payload.issue.number
               : context.payload.pull_request?.number;
 
-            const fileList = process.env.FILE_LIST;
-            const repo = process.env.REPO;
+            const filesResp = await github.rest.repos.getContent({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              path: ".",
+            });
+            const fileList = filesResp.data
+              .map(f => (f.type === "dir" ? "[dir] " : "") + f.name)
+              .join("\n");
+
+            let indexHtml = "";
+            try {
+              const idx = await github.rest.repos.getContent({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                path: "index.html",
+              });
+              indexHtml = Buffer.from(idx.data.content, "base64").toString("utf8");
+            } catch (e) {
+              indexHtml = "(index.html not found)";
+            }
 
             const systemPrompt = [
-              "You are a GitHub comment bot for the repository \"" + repo + "\".",
+              "You are a code-editing bot for the GitHub repository \"" + context.repo.owner + "/" + context.repo.repo + "\".",
               "",
               "WHAT THIS REPO IS:",
               "Static HTML site for 2027 Korean university essay admission calendar (2027학년도 논술전형 달력).",
-              "Main file: index.html — all calendar data is INLINE in JS objects (deadlines, exams, results arrays).",
               "",
-              "REPO FILES:",
+              "INDEX.HTML DATA STRUCTURE (inline JS):",
+              "- events.deadlines[]: { name, start(YYYY-MM-DD), end, color }",
+              "- events.exams[]: { name, date(YYYY-MM-DD), type, end? }",
+              "- events.results[]: { name, date(YYYY-MM-DD) }",
+              "- events.monthly[]: month-by-month schedule rendered in calendar view",
+              "",
+              "AVAILABLE FILES:",
               fileList,
               "",
-              "YOUR ROLE:",
-              "- Read the issue/PR comment and respond helpfully as a text comment only.",
-              "- You CANNOT push code, create PRs, edit files, or access external URLs/PDFs.",
-              "- NEVER claim you verified PDFs, checked websites, or made code changes.",
-              "- NEVER say \"PR 올리겠습니다\", \"수정하겠습니다\", \"확인했습니다\" unless literally true.",
+              "CURRENT INDEX.HTML CONTENT:",
+              indexHtml.substring(0, 8000),
+              indexHtml.length > 8000 ? "\n...[truncated, total " + indexHtml.length + " chars]" : "",
               "",
-              "WHEN USER ASKS TO FIX DATA (e.g. wrong dates):",
-              "1. Acknowledge the report",
-              "2. State the CURRENT value from repo data you can see",
-              "3. State the CORRECTED value the user provided (or mark as unverified if unsure)",
-              "4. Give the exact line/snippet to change",
+              "YOUR TASK:",
+              "The user wants to fix or modify data/code in this repo.",
+              "You MUST respond with ONLY a valid JSON object — no markdown, no explanation.",
               "",
-              "KEEP IT SHORT. 2-5 bullet points max. No filler.",
+              "RESPONSE FORMAT (strict JSON):",
+              "{",
+              "  \"explanation\": \"1-2 sentence summary of what you changed\",",
+              "  \"branch\": \"short-kebab-case-branch-name\",",
+              "  \"edits\": [",
+              "    {",
+              "      \"file\": \"index.html\",",
+              "      \"old\": \"exact string to find (must match exactly including whitespace)\",",
+              "      \"new\": \"replacement string\"",
+              "    }",
+              "  ]",
+              "}",
+              "",
+              "RULES:",
+              "- \"old\" must match the EXACT text in the file (copy-paste friendly)",
+              "- If multiple changes, include multiple objects in \"edits\" array",
+              "- Keep \"old\" as short as possible but unique within the file",
+              "- branch name: short, descriptive, kebab-case",
+              "- ONLY return the JSON object, no other text",
             ].join("\n");
 
-            const userPrompt = "A user wrote this " + (isIssue ? "issue comment" : "PR review comment") + ":\n\n\"" + commentBody + "\"\n\nRespond concisely as a helpful bot. Remember: you cannot edit code or access PDFs.";
+            const userPrompt = "User request:\n\n\"" + commentBody + "\"\n\nReturn the JSON edit plan.";
 
             const res = await fetch(
               "https://inference-api.nousresearch.com/v1/chat/completions",
@@ -239,6 +381,7 @@ jobs:
                     { role: "user", content: userPrompt },
                   ],
                   max_tokens: 2048,
+                  temperature: 0.3,
                 }),
               }
             );
@@ -250,30 +393,117 @@ jobs:
             }
 
             const data = await res.json();
-            const reply = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || "(no response)";
+            const rawReply = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || "";
 
-            const marker = "<!-- cc-bot -->";
-            const body = marker + "\n🤖 **Claude Code** responded:\n\n" + reply;
-
-            if (isIssue) {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: number,
-                body,
-              });
-            } else {
-              await github.rest.pulls.createReviewComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                pull_number: number,
-                body,
-                commit_id: context.payload.comment.commit_id,
-                path: context.payload.comment.path,
-                line: context.payload.comment.line ?? context.payload.comment.original_line,
-              });
+            let parsed;
+            try {
+              let jsonStr = rawReply.trim();
+              const codeBlockMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+              if (codeBlockMatch) {
+                jsonStr = codeBlockMatch[1].trim();
+              }
+              parsed = JSON.parse(jsonStr);
+            } catch (e) {
+              core.setFailed("Failed to parse JSON from AI response: " + rawReply.substring(0, 500));
+              return;
             }
+
+            if (!parsed.edits || parsed.edits.length === 0) {
+              core.setFailed("No edits in AI response: " + JSON.stringify(parsed).substring(0, 500));
+              return;
+            }
+
+            core.setOutput("plan", JSON.stringify(parsed));
         env:
           NOUS_API_KEY: ${{ secrets.NOUS_API_KEY }}
-          FILE_LIST: ${{ steps.ctx-cc.outputs.fileList }}
-          REPO: ${{ steps.ctx-cc.outputs.repo }}
+
+      - name: Apply edits (/cc)
+        if: steps.api-cc.outputs.plan
+        shell: bash
+        run: |
+          PLAN='${{ steps.api-cc.outputs.plan }}'
+          echo "Plan: $PLAN"
+
+          node -e "
+            const plan = JSON.parse(process.env.PLAN);
+            const fs = require('fs');
+
+            for (const edit of plan.edits) {
+              const content = fs.readFileSync(edit.file, 'utf8');
+              if (!content.includes(edit.old)) {
+                console.error('ERROR: old text not found in ' + edit.file);
+                console.error('Looking for: ' + edit.old.substring(0, 100));
+                process.exit(1);
+              }
+              const newContent = content.replace(edit.old, edit.new);
+              fs.writeFileSync(edit.file, newContent);
+              console.log('Applied edit to ' + edit.file);
+            }
+            console.log('All edits applied successfully');
+          "
+        env:
+          PLAN: ${{ steps.api-cc.outputs.plan }}
+
+      - name: Create branch and commit (/cc)
+        if: steps.api-cc.outputs.plan
+        id: branch-cc
+        shell: bash
+        run: |
+          PLAN='${{ steps.api-cc.outputs.plan }}'
+          BRANCH=$(node -e "console.log(JSON.parse(process.env.PLAN).branch || 'cc-fix-$(date +%s)')")
+          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add -A
+          git commit -m "fix: apply /cc edits via Claude Code
+
+          Automated fix based on issue context.
+          Branch: $BRANCH"
+          git push origin "$BRANCH"
+        env:
+          PLAN: ${{ steps.api-cc.outputs.plan }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create PR (/cc)
+        if: steps.branch-cc.outputs.branch
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const plan = JSON.parse(process.env.PLAN);
+            const branch = process.env.BRANCH;
+            const isIssue = !!context.payload.issue;
+            const number = isIssue
+              ? context.payload.issue.number
+              : context.payload.pull_request?.number;
+
+            const pr = await github.rest.pulls.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: "fix: " + (plan.explanation || " edits via /cc"),
+              head: branch,
+              base: "main",
+              body: [
+                "## Summary",
+                plan.explanation || "Automated fix",
+                "",
+                "Changes:",
+                ...plan.edits.map(e => "- `" + e.file + "`: " + e.old.substring(0, 50) + " → " + e.new.substring(0, 50)),
+                "",
+                "Triggered by: #" + number,
+                "",
+                "---",
+                "*This PR was auto-generated by Claude Code bot*",
+              ].join("\n"),
+            });
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: number,
+              body: "🤖 Claude Code created PR #" + pr.data.number + " on branch `" + branch + "`\n\n" + (plan.explanation || ""),
+            });
+        env:
+          PLAN: ${{ steps.api-cc.outputs.plan }}
+          BRANCH: ${{ steps.branch-cc.outputs.branch }}

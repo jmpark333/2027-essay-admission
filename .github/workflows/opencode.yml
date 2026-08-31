@@ -1,73 +1,86 @@
-    name: opencode                               
-    on:
-      issues:
-        types: [opened]
-      issue_comment:
-        types: [created]
-      pull_request_review_comment:
-        types: [created]
+name: opencode
 
-    permissions:
-      id-token: write                                  contents: write
-      pull-requests: write
-      issues: write
+on:
+  issues:
+    types: [opened]
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
 
-    jobs:
-      opencode:
-        runs-on: ubuntu-latest
-        steps:
-          - name: Checkout repository
-            uses: actions/checkout@v3
+permissions:
+  id-token: write
+  contents: write
+  pull-requests: write
+  issues: write
 
-          - name: Run OpenCode (/oc)
-            id: run-opencode
-            if: |                                              contains(github.event.comment.body, '/oc') ||
-              startsWith(github.event.comment.body, '/oc') ||
-              contains(github.event.comment.body, '/opencode') ||
-              startsWith(github.event.comment.body, '/opencode')
-            run: |
-              RESPONSE=$(curl -s https://inference-api.nousresearch.com/v1/chat/completions \
-                -H "Authorization: Bearer ${{ secrets.NOUS_API_KEY }}" \
-                -H "Content-Type: application/json" \
-                -d '{
-                  "model": "meituan/longcat-2.0:free",
-                  "messages": [{"role": "user", "content": "${{ github.event.comment.body }}"}],
-                  "max_tokens": 4096
-                }')
-              echo "response=$RESPONSE" >> $GITHUB_OUTPUT
+jobs:
+  opencode:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-          - name: Comment on issue (/oc)
-            if: steps.run-opencode.outputs.response
-            uses: actions/github-script@v7
-            with:
-              script: |
-                const response = ${{ steps.run-opencode.outputs.response }};                                      const data = JSON.parse(response);                                                                const content = data.choices[0].message.content;                                                  github.rest.issues.createComment({                                                                  issue_number: context.issue.number,                                                               owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  body: content                                  })
+      - name: Run OpenCode (/oc)
+        id: run-opencode
+        if: |
+          contains(github.event.comment.body, '/oc') ||
+          startsWith(github.event.comment.body, '/oc') ||
+          contains(github.event.comment.body, '/opencode') ||
+          startsWith(github.event.comment.body, '/opencode')
+        run: |
+          RESPONSE=$(curl -s https://inference-api.nousresearch.com/v1/chat/completions \
+            -H "Authorization: Bearer ${{ secrets.NOUS_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "model": "meituan/longcat-2.0:free",
+              "messages": [{"role": "user", "content": "${{ github.event.comment.body }}"}],
+              "max_tokens": 4096
+            }')
+          echo "response=$RESPONSE" >> $GITHUB_OUTPUT
 
-          - name: Run Claude Code (/cc)
-            id: run-claude
-            if: |
-              contains(github.event.comment.body, '/cc') ||
-              startsWith(github.event.comment.body, '/cc')
-            run: |                                             RESPONSE=$(curl -s https://inference-api.nousresearch.com/v1/chat/completions \
-                -H "Authorization: Bearer ${{ secrets.NOUS_API_KEY }}" \
-                -H "Content-Type: application/json" \                                                             -d '{
-                  "model": "meituan/longcat-2.0:free",
-                  "messages": [{"role": "user", "content": "${{ github.event.comment.body }}"}],                    "max_tokens": 4096
-                }')
-              echo "response=$RESPONSE" >> $GITHUB_OUTPUT
+      - name: Comment on issue (/oc)
+        if: steps.run-opencode.outputs.response
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const response = ${{ steps.run-opencode.outputs.response }};
+            const data = JSON.parse(response);
+            const content = data.choices[0].message.content;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: content
+            })
 
-          - name: Comment on issue (/cc)
-            if: steps.run-claude.outputs.response
-            uses: actions/github-script@v7
-            with:
-              script: |                                          const response = ${{ steps.run-claude.outputs.response }};
-                const data = JSON.parse(response);
-                const content = data.choices[0].message.content;
-                github.rest.issues.createComment({
-                  issue_number: context.issue.number,
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  body: content
-                })
+      - name: Run Claude Code (/cc)
+        id: run-claude
+        if: |
+          contains(github.event.comment.body, '/cc') ||
+          startsWith(github.event.comment.body, '/cc')
+        run: |
+          RESPONSE=$(curl -s https://inference-api.nousresearch.com/v1/chat/completions \
+            -H "Authorization: Bearer ${{ secrets.NOUS_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "model": "meituan/longcat-2.0:free",
+              "messages": [{"role": "user", "content": "${{ github.event.comment.body }}"}],
+              "max_tokens": 4096
+            }')
+          echo "response=$RESPONSE" >> $GITHUB_OUTPUT
+
+      - name: Comment on issue (/cc)
+        if: steps.run-claude.outputs.response
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const response = ${{ steps.run-claude.outputs.response }};
+            const data = JSON.parse(response);
+            const content = data.choices[0].message.content;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: content
+            })

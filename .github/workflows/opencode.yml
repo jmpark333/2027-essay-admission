@@ -135,7 +135,7 @@ jobs:
                   "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                  model: "meituan/longcat-2.0:free",
+                  model: "stepfun/step-3.7-flash:free",
                   messages: [
                     { role: "system", content: systemPrompt },
                     { role: "user", content: userPrompt },
@@ -419,7 +419,7 @@ jobs:
                   "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                  model: "meituan/longcat-2.0:free",
+                  model: "stepfun/step-3.7-flash:free",
                   messages: [
                     { role: "system", content: systemPrompt },
                     { role: "user", content: userPrompt },

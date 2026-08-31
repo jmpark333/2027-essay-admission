@@ -10,7 +10,7 @@
 |------|-----|
 | 레포지토리 | `jmpark333/2027-essay-admission` |
 | 워크플로우 파일 | `.github/workflows/opencode.yml` |
-| AI 모델 | `meituan/longcat-2.0:free` (Nous Research API) |
+| AI 모델 | `stepfun/step-3.7-flash:free` (Nous Research API) |
 | API 엔드포인트 | `https://inference-api.nousresearch.com/v1/chat/completions` |
 | API 키 | `secrets.NOUS_API_KEY` |
 | 모델 최대 출력 | 128K (131,072 토큰) |
@@ -41,16 +41,16 @@
 ### 3. API 호출 설정 (수정 완료, 미검증)
 ```javascript
 {
-  model: "meituan/longcat-2.0:free",
+  model: "stepfun/step-3.7-flash:free",
   max_tokens: 16384,        // 기존 2048 → 16384로 증가
-  temperature: 0.3,
-  reasoning_effort: "high"  // 기존 미설정 → high로 설정
+  temperature: 0.3
+  // reasoning_effort 제거 (longcat-2.0에서 content null 문제 발생)
 }
 ```
 
 ---
 
-## ⚠️ 수정 확인 필요 (테스트 대기 중)
+## ✅ 수정 완료 (검증 대기 중)
 
 ### 문제: 빈 응답 (Empty Response)
 **증상:**
@@ -68,12 +68,15 @@ Nous API status: 200
 ```
 
 **원인:**
-- `meituan/longcat-2.0:free` 모델이 내부 reasoning에 모든 토큰 소모
-- `max_tokens: 2048`로는 reasoning + 실제 응답 불가
+- `meituan/longcat-2.0:free` 모델이 `reasoning_effort: "high"` 설정 시 내부 reasoning에 모든 토큰 소모
+- `content`가 null로 반환되어 JSON 파싱 실패 (`Unexpected end of JSON input`)
 
 **수정 내용:**
-- `max_tokens: 2048` → `16384`
-- `reasoning_effort: "high"` 추가 (충분한 토큰이 있으므로 high가 더 품질 좋음)
+- 모델 변경: `meituan/longcat-2.0:free` → `stepfun/step-3.7-flash:free` (코딩/에이전트 워크플로우 특화)
+- `reasoning_effort: "high"` 제거
+- `content`가 비어 있을 때 `reasoning_content`에서 JSON 추출하는 fallback 추가
+- cc job도 oc job과 동일한 견고한 JSON 파싱 로직(코드블록 + JSON 추출)으로 통일
+- Node 20 deprecation 경고 해결 (`ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true`)
 
 **검증 방법:**
 1. 이슈에 `/oc 테스트` 코멘트 작성

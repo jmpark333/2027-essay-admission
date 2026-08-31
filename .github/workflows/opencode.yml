@@ -30,18 +30,23 @@ jobs:
         uses: anomalyco/opencode/github@latest
         env:
           ZHIPU_API_KEY: ${{ secrets.NOUS_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.NOUS_API_KEY }}
+          OPENAI_BASE_URL: https://inference-api.nousresearch.com/v1
         with:
           model: meituan/longcat-2.0:free
 
-      # /cc → Claude Code
+      # /cc → Nous API 직접 호출
       - name: Run Claude Code (/cc)
         if: |
           contains(github.event.comment.body, '/cc') ||
           startsWith(github.event.comment.body, '/cc')
         env:
-          ZHIPU_API_KEY: ${{ secrets.NOUS_API_KEY }}
+          NOUS_API_KEY: ${{ secrets.NOUS_API_KEY }}
         run: |
-          curl -fsSL https://cli.anthropic.com/install.sh | bash
-          claude --model meituan/longcat-2.0:free \
-            --api-key "$ZHIPU_API_KEY" \
-            -p "${{ github.event.comment.body }}"
+          curl -s https://inference-api.nousresearch.com/v1/chat/completions \
+            -H "Authorization: Bearer *** \
+            -H "Content-Type: application/json" \
+            -d '{
+              "model": "meituan/longcat-2.0:free",
+              "messages": [{"role": "user", "content": "${{ github.event.comment.body }}"}]
+            }'

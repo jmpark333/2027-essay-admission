@@ -11,6 +11,10 @@ permissions:
   issues: write
   pull-requests: write
 
+# Node 20 deprecation 경고 해결 (github-script@v7이 Node 20 사용)
+env:
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+
 jobs:
   oc:
     name: "OpenCode (/oc)"
@@ -138,7 +142,8 @@ jobs:
                   ],
                   max_tokens: 16384,
                   temperature: 0.3,
-                  reasoning_effort: "high",
+                  // reasoning_effort 제거: high면 모든 토큰을 reasoning에 소모해
+                  // content가 null로 반환되어 JSON 파싱이 실패함 (finish_reason: length)
                 }),
               }
             );
@@ -158,11 +163,19 @@ jobs:
             console.log(JSON.stringify(data, null, 2).substring(0, 3000));
             console.log("=== END API RESPONSE ===");
 
-            const rawReply = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || "";
+            const msg = data.choices && data.choices[0] && data.choices[0].message;
+            let rawReply = (msg && msg.content) || "";
+
+            // content가 비어 있으면 reasoning_content에서 JSON 블록 추출 시도
+            if (!rawReply.trim() && msg && msg.reasoning_content) {
+              const rc = msg.reasoning_content;
+              const m = rc.match(/\{[\s\S]*\}/);
+              if (m) rawReply = m[0];
+            }
 
             // Log for debugging
             console.log("=== RAW AI RESPONSE (length: " + rawReply.length + ") ===");
-            console.log(rawReply);
+            console.log(rawReply.substring(0, 3000));
             console.log("=== END RESPONSE ===");
 
             // Parse JSON from response (handle markdown code blocks, trailing text)
@@ -413,7 +426,8 @@ jobs:
                   ],
                   max_tokens: 16384,
                   temperature: 0.3,
-                  reasoning_effort: "high",
+                  // reasoning_effort 제거: high면 모든 토큰을 reasoning에 소모해
+                  // content가 null로 반환되어 JSON 파싱이 실패함 (finish_reason: length)
                 }),
               }
             );
@@ -425,14 +439,29 @@ jobs:
             }
 
             const data = await res.json();
-            const rawReply = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || "";
+            const msg = data.choices && data.choices[0] && data.choices[0].message;
+            let rawReply = (msg && msg.content) || "";
+
+            // content가 비어 있으면 reasoning_content에서 JSON 블록 추출 시도
+            if (!rawReply.trim() && msg && msg.reasoning_content) {
+              const rc = msg.reasoning_content;
+              const m = rc.match(/\{[\s\S]*\}/);
+              if (m) rawReply = m[0];
+            }
 
             let parsed;
             try {
               let jsonStr = rawReply.trim();
+              // Try code block first
               const codeBlockMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
               if (codeBlockMatch) {
                 jsonStr = codeBlockMatch[1].trim();
+              } else {
+                // Try to extract JSON object from surrounding text
+                const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
+                if (jsonMatch) {
+                  jsonStr = jsonMatch[0];
+                }
               }
               parsed = JSON.parse(jsonStr);
             } catch (e) {

@@ -32,7 +32,7 @@
               OPENAI_BASE_URL: https://inference-api.nousresearch.com/v1
             run: |
               curl -s https://inference-api.nousresearch.com/v1/chat/completions \
-                -H "Authorization: Bearer *** \
+                -H "Authorization: Bearer ${{ secrets.NOUS_API_KEY }}" \
                 -H "Content-Type: application/json" \
                 -d '{
                   "model": "meituan/longcat-2.0:free",
@@ -49,7 +49,7 @@
               OPENAI_BASE_URL: https://inference-api.nousresearch.com/v1
             run: |
               curl -s https://inference-api.nousresearch.com/v1/chat/completions \
-                -H "Authorization: Bearer *** \
+                -H "Authorization: Bearer ${{ secrets.NOUS_API_KEY }}" \
                 -H "Content-Type: application/json" \
                 -d '{
                   "model": "meituan/longcat-2.0:free",

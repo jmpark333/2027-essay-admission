@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="app-version" content="__APP_VERSION__">
 <title>2027학년도 논술전형 일정 달력</title>
 <style>
 :root {
@@ -729,6 +730,28 @@ buildCalendar();
 buildDetails();
 setupFilters();
 setupTooltips();
+
+/* ----- 캐시 재검증: 최신 버전과 다르면 자동 새로고침 ----- */
+(function() {
+  const current = (document.querySelector('meta[name="app-version"]') || {}).content || '';
+  const checkVersion = () => {
+    fetch('index.html?revalidate=' + Date.now(), { cache: 'no-store' })
+      .then(r => r.text())
+      .then(html => {
+        const m = html.match(/<meta name="app-version" content="([^"]+)">/);
+        const latest = m ? m[1] : '';
+        if (latest && current && latest !== current) {
+          window.location.reload();
+        }
+      })
+      .catch(() => {});
+  };
+  window.addEventListener('focus', checkVersion);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') checkVersion();
+  });
+  checkVersion();
+})();
 </script>
 </body>
 </html>

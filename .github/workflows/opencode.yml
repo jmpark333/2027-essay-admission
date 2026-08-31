@@ -24,6 +24,9 @@ jobs:
       )
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: React to comment (/oc)
         uses: actions/github-script@v7
         with:
@@ -35,6 +38,20 @@ jobs:
               content: "eyes",
             });
 
+      - name: Gather repo context (/oc)
+        id: ctx-oc
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const files = await github.rest.repos.getContent({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              path: ".",
+            });
+            const fileList = files.data.map(f => (f.type === "dir" ? "[dir] " : "") + f.name).join("\n");
+            core.setOutput("fileList", fileList);
+            core.setOutput("repo", context.repo.owner + "/" + context.repo.repo);
+
       - name: Call Nous API (/oc)
         uses: actions/github-script@v7
         with:
@@ -45,24 +62,41 @@ jobs:
               ? context.payload.issue.number
               : context.payload.pull_request?.number;
 
-            const prompt = `You are a helpful coding assistant on GitHub.
-            A user wrote this comment on a GitHub ${isIssue ? 'issue' : 'pull request'}:
+            const fileList = process.env.FILE_LIST;
+            const repo = process.env.REPO;
 
-            "${commentBody}"
+            const systemPrompt = [
+              "You are a helpful coding assistant for the GitHub repository \"" + repo + "\".",
+              "This repository is a static HTML site for 2027학년도 논술전형 달력 (Korean university essay admission calendar).",
+              "",
+              "Repository files:",
+              fileList,
+              "",
+              "The main file is index.html which contains all calendar data (universities, dates, schedules inline in HTML/CSS/JS).",
+              "",
+              "When responding:",
+              "- Reference specific files and line numbers",
+              "- Give concrete fix suggestions with code snippets",
+              "- Do NOT ask \"what is the repo?\" or \"show me file paths\" — you already have them",
+              "- Answer as if you are a maintainer who knows this codebase",
+            ].join("\n");
 
-            Provide a concise, helpful response. Use markdown.`;
+            const userPrompt = "A user wrote this " + (isIssue ? "issue comment" : "PR review comment") + ":\n\n\"" + commentBody + "\"\n\nProvide a concise, helpful response. Use markdown.";
 
             const res = await fetch(
               "https://inference-api.nousresearch.com/v1/chat/completions",
               {
                 method: "POST",
                 headers: {
-                  Authorization: `Bearer ${process.env.NOUS_API_KEY}`,
+                  Authorization: "Bearer " + process.env.NOUS_API_KEY,
                   "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
                   model: "meituan/longcat-2.0:free",
-                  messages: [{ role: "user", content: prompt }],
+                  messages: [
+                    { role: "system", content: systemPrompt },
+                    { role: "user", content: userPrompt },
+                  ],
                   max_tokens: 2048,
                 }),
               }
@@ -70,15 +104,15 @@ jobs:
 
             if (!res.ok) {
               const err = await res.text();
-              core.setFailed(`Nous API error ${res.status}: ${err}`);
+              core.setFailed("Nous API error " + res.status + ": " + err);
               return;
             }
 
             const data = await res.json();
-            const reply = data.choices?.[0]?.message?.content ?? "(no response)";
+            const reply = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || "(no response)";
 
             const marker = "<!-- oc-bot -->";
-            const body = `${marker}\n🤖 **OpenCode** responded:\n\n${reply}`;
+            const body = marker + "\n🤖 **OpenCode** responded:\n\n" + reply;
 
             if (isIssue) {
               await github.rest.issues.createComment({
@@ -100,6 +134,8 @@ jobs:
             }
         env:
           NOUS_API_KEY: ${{ secrets.NOUS_API_KEY }}
+          FILE_LIST: ${{ steps.ctx-oc.outputs.fileList }}
+          REPO: ${{ steps.ctx-oc.outputs.repo }}
 
   cc:
     name: "Claude Code (/cc)"
@@ -111,6 +147,9 @@ jobs:
       )
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: React to comment (/cc)
         uses: actions/github-script@v7
         with:
@@ -122,6 +161,20 @@ jobs:
               content: "eyes",
             });
 
+      - name: Gather repo context (/cc)
+        id: ctx-cc
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const files = await github.rest.repos.getContent({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              path: ".",
+            });
+            const fileList = files.data.map(f => (f.type === "dir" ? "[dir] " : "") + f.name).join("\n");
+            core.setOutput("fileList", fileList);
+            core.setOutput("repo", context.repo.owner + "/" + context.repo.repo);
+
       - name: Call Nous API (/cc)
         uses: actions/github-script@v7
         with:
@@ -132,24 +185,41 @@ jobs:
               ? context.payload.issue.number
               : context.payload.pull_request?.number;
 
-            const prompt = `You are Claude Code, a helpful coding assistant on GitHub.
-            A user wrote this comment on a GitHub ${isIssue ? 'issue' : 'pull request'}:
+            const fileList = process.env.FILE_LIST;
+            const repo = process.env.REPO;
 
-            "${commentBody}"
+            const systemPrompt = [
+              "You are Claude Code, a helpful coding assistant for the GitHub repository \"" + repo + "\".",
+              "This repository is a static HTML site for 2027학년도 논술전형 달력 (Korean university essay admission calendar).",
+              "",
+              "Repository files:",
+              fileList,
+              "",
+              "The main file is index.html which contains all calendar data (universities, dates, schedules inline in HTML/CSS/JS).",
+              "",
+              "When responding:",
+              "- Reference specific files and line numbers",
+              "- Give concrete fix suggestions with code snippets",
+              "- Do NOT ask \"what is the repo?\" or \"show me file paths\" — you already have them",
+              "- Answer as if you are a maintainer who knows this codebase",
+            ].join("\n");
 
-            Provide a concise, helpful response. Use markdown.`;
+            const userPrompt = "A user wrote this " + (isIssue ? "issue comment" : "PR review comment") + ":\n\n\"" + commentBody + "\"\n\nProvide a concise, helpful response. Use markdown.";
 
             const res = await fetch(
               "https://inference-api.nousresearch.com/v1/chat/completions",
               {
                 method: "POST",
                 headers: {
-                  Authorization: `Bearer ${process.env.NOUS_API_KEY}`,
+                  Authorization: "Bearer " + process.env.NOUS_API_KEY,
                   "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
                   model: "meituan/longcat-2.0:free",
-                  messages: [{ role: "user", content: prompt }],
+                  messages: [
+                    { role: "system", content: systemPrompt },
+                    { role: "user", content: userPrompt },
+                  ],
                   max_tokens: 2048,
                 }),
               }
@@ -157,15 +227,15 @@ jobs:
 
             if (!res.ok) {
               const err = await res.text();
-              core.setFailed(`Nous API error ${res.status}: ${err}`);
+              core.setFailed("Nous API error " + res.status + ": " + err);
               return;
             }
 
             const data = await res.json();
-            const reply = data.choices?.[0]?.message?.content ?? "(no response)";
+            const reply = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || "(no response)";
 
             const marker = "<!-- cc-bot -->";
-            const body = `${marker}\n🤖 **Claude Code** responded:\n\n${reply}`;
+            const body = marker + "\n🤖 **Claude Code** responded:\n\n" + reply;
 
             if (isIssue) {
               await github.rest.issues.createComment({
@@ -187,3 +257,5 @@ jobs:
             }
         env:
           NOUS_API_KEY: ${{ secrets.NOUS_API_KEY }}
+          FILE_LIST: ${{ steps.ctx-cc.outputs.fileList }}
+          REPO: ${{ steps.ctx-cc.outputs.repo }}

@@ -186,23 +186,25 @@ header p { color: var(--text-muted); font-size: 0.95rem; }
   font-weight: 700;
 }
 
-/* Tooltip */
-.day[data-tooltip]:hover::before {
-  content: attr(data-tooltip);
-  position: absolute;
-  bottom: 100%;
-  left: 50%;
-  transform: translateX(-50%);
+/* Tooltip (dynamic JS) */
+.cal-tooltip {
+  position: fixed;
+  z-index: 1000;
   background: #1f2937;
   color: white;
   padding: 0.4rem 0.6rem;
   border-radius: 6px;
   font-size: 0.7rem;
-  white-space: nowrap;
-  z-index: 100;
+  line-height: 1.5;
+  white-space: normal;
+  max-width: 260px;
   border: 1px solid var(--border);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
   pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s;
 }
+.cal-tooltip.show { opacity: 1; }
 
 /* Timeline bar */
 .timeline-section { margin-bottom: 3rem; }
@@ -512,16 +514,16 @@ const events = {
   ],
   suneung: { date: '2026-11-19', label: '2027 수능' },
   results: [
-    { name: '연세대', date: '2026-11-09' },
-    { name: '중앙대(창의형)', date: '2026-11-09' },
-    { name: '중앙대(일반)', date: '2026-12-20' },
+    { name: '연세대', date: '2026-12-18' },
+    { name: '중앙대(창의형)', date: '2026-11-26' },
+    { name: '중앙대(일반)', date: '2026-12-18' },
     { name: '경희대', date: '2026-12-18' },
-    { name: '성균관대', date: '2026-12-20' },
-    { name: '서강대', date: '2026-12-20' },
+    { name: '성균관대', date: '2026-12-18' },
+    { name: '서강대', date: '2026-12-18' },
     { name: '숭실대', date: '2026-12-18' },
-    { name: '한양대', date: '2026-12-20' },
-    { name: '이화여대', date: '2026-12-20' },
-    { name: '아주대', date: '2026-12-21' },
+    { name: '한양대', date: '2026-12-18' },
+    { name: '이화여대', date: '2026-12-17' },
+    { name: '아주대', date: '2026-12-18' },
   ]
 };
 
@@ -688,9 +690,45 @@ function filterView(filter) {
   });
 }
 
+function setupTooltips() {
+  const tip = document.createElement('div');
+  tip.className = 'cal-tooltip';
+  document.body.appendChild(tip);
+  const show = (cell, e) => {
+    const text = cell.getAttribute('data-tooltip');
+    if (!text) return;
+    tip.textContent = text;
+    tip.classList.add('show');
+    const pad = 8;
+    let left = e.clientX + 14;
+    let top = e.clientY + 14;
+    const r = tip.getBoundingClientRect();
+    if (left + r.width > window.innerWidth - pad) {
+      left = e.clientX - r.width - 14;
+    }
+    if (top + r.height > window.innerHeight - pad) {
+      top = e.clientY - r.height - 14;
+    }
+    if (left < pad) left = pad;
+    if (top < pad) top = pad;
+    tip.style.left = left + 'px';
+    tip.style.top = top + 'px';
+  };
+  const hide = () => tip.classList.remove('show');
+  const cells = document.querySelectorAll('#calendarGrid .day[data-tooltip]');
+  cells.forEach(cell => {
+    cell.addEventListener('mouseenter', e => show(cell, e));
+    cell.addEventListener('mousemove', e => show(cell, e));
+    cell.addEventListener('mouseleave', hide);
+    cell.addEventListener('click', e => show(cell, e));
+  });
+  document.addEventListener('scroll', hide, true);
+}
+
 buildCalendar();
 buildDetails();
 setupFilters();
+setupTooltips();
 </script>
 </body>
 </html>

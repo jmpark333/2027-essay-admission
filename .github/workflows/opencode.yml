@@ -24,6 +24,17 @@ jobs:
       )
     runs-on: ubuntu-latest
     steps:
+      - name: React to comment (/oc)
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              content: "eyes",
+            });
+
       - name: Call Nous API (/oc)
         uses: actions/github-script@v7
         with:
@@ -100,6 +111,17 @@ jobs:
       )
     runs-on: ubuntu-latest
     steps:
+      - name: React to comment (/cc)
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              content: "eyes",
+            });
+
       - name: Call Nous API (/cc)
         uses: actions/github-script@v7
         with:

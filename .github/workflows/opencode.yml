@@ -133,111 +133,134 @@ jobs:
 
             const userPrompt = "User request:\n\n\"" + commentBody + "\"\n\nReturn the JSON edit plan.";
 
-            // 524 Timeout 방지: 무료 모델은 응답이 느리므로 290초까지 대기
-            const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 290000);
+            // --- Nous API 호출 (3회 재시도) ---
+            // 무료 모델은 524 타임아웃/일시적 오류가 잦으므로 재시도 루프 적용
+            let parsed = null;
+            let lastError = "";
 
-            let res;
-            try {
-              res = await fetch(
-                "https://inference-api.nousresearch.com/v1/chat/completions",
-                {
-                  method: "POST",
-                  headers: {
-                    Authorization: "Bearer " + process.env.NOUS_API_KEY,
-                    "Content-Type": "application/json",
-                  },
-                  body: JSON.stringify({
-                    model: "poolside/laguna-s-2.1:free",
-                    messages: [
-                      { role: "system", content: systemPrompt },
-                      { role: "user", content: userPrompt },
-                    ],
-                    max_tokens: 16384,
-                    temperature: 0.3,
-                  }),
-                  signal: controller.signal,
-                }
-              );
-            } catch (e) {
-              clearTimeout(timeout);
-              core.setFailed("Nous API timeout/error: " + e.message);
-              return;
-            }
-            clearTimeout(timeout);
+            for (let attempt = 1; attempt <= 3; attempt++) {
+              console.log("--- Nous API attempt " + attempt + "/3 ---");
 
-            console.log("Nous API status: " + res.status);
+              const controller = new AbortController();
+              const timeout = setTimeout(() => controller.abort(), 290000);
 
-            if (!res.ok) {
-              const err = await res.text();
-              core.setFailed("Nous API error " + res.status + ": " + err);
-              return;
-            }
-
-            const data = await res.json();
-
-            // Log full API response for debugging
-            console.log("=== FULL API RESPONSE ===");
-            console.log(JSON.stringify(data, null, 2).substring(0, 3000));
-            console.log("=== END API RESPONSE ===");
-
-            const msg = data.choices && data.choices[0] && data.choices[0].message;
-            let rawReply = (msg && msg.content) || "";
-
-            // content가 비어 있으면 reasoning_content에서 JSON 블록 추출 시도
-            if (!rawReply.trim() && msg && msg.reasoning_content) {
-              const rc = msg.reasoning_content;
-              const m = rc.match(/\{[\s\S]*\}/);
-              if (m) rawReply = m[0];
-            }
-
-            // Log for debugging
-            console.log("=== RAW AI RESPONSE (length: " + rawReply.length + ") ===");
-            console.log(rawReply.substring(0, 3000));
-            console.log("=== END RESPONSE ===");
-
-            // Parse JSON from response (handle markdown code blocks, trailing text)
-            let parsed;
-            try {
-              let jsonStr = rawReply.trim();
-              // Try code block first
-              const codeBlockMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
-              if (codeBlockMatch) {
-                jsonStr = codeBlockMatch[1].trim();
-              } else {
-                // Try to extract JSON object from surrounding text
-                const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
-                if (jsonMatch) {
-                  jsonStr = jsonMatch[0];
-                }
+              let res;
+              try {
+                res = await fetch(
+                  "https://inference-api.nousresearch.com/v1/chat/completions",
+                  {
+                    method: "POST",
+                    headers: {
+                      Authorization: "Bearer " + process.env.NOUS_API_KEY,
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                      model: "poolside/laguna-s-2.1:free",
+                      messages: [
+                        { role: "system", content: systemPrompt },
+                        { role: "user", content: userPrompt },
+                      ],
+                      max_tokens: 16384,
+                      temperature: 0.3,
+                    }),
+                    signal: controller.signal,
+                  }
+                );
+              } catch (e) {
+                clearTimeout(timeout);
+                lastError = "network/timeout: " + e.message;
+                console.error("Attempt " + attempt + " failed: " + lastError);
+                await new Promise(r => setTimeout(r, 5000 * attempt));
+                continue;
               }
-              parsed = JSON.parse(jsonStr);
-            } catch (e) {
-              console.error("JSON parse error: " + e.message);
-              console.error("Raw response was: " + rawReply.substring(0, 1000));
-              core.setFailed("Failed to parse JSON from AI response: " + rawReply.substring(0, 500));
+              clearTimeout(timeout);
+
+              console.log("Nous API status: " + res.status);
+
+              if (!res.ok) {
+                const err = await res.text();
+                lastError = "HTTP " + res.status + ": " + err.substring(0, 300);
+                console.error("Attempt " + attempt + " failed: " + lastError);
+                await new Promise(r => setTimeout(r, 5000 * attempt));
+                continue;
+              }
+
+              const data = await res.json();
+
+              // Log full API response for debugging
+              console.log("=== FULL API RESPONSE ===");
+              console.log(JSON.stringify(data, null, 2).substring(0, 3000));
+              console.log("=== END API RESPONSE ===");
+
+              const msg = data.choices && data.choices[0] && data.choices[0].message;
+              let rawReply = (msg && msg.content) || "";
+
+              // content가 비어 있으면 reasoning_content에서 JSON 블록 추출 시도
+              if (!rawReply.trim() && msg && msg.reasoning_content) {
+                const rc = msg.reasoning_content;
+                const m = rc.match(/\{[\s\S]*\}/);
+                if (m) rawReply = m[0];
+              }
+
+              // Log for debugging
+              console.log("=== RAW AI RESPONSE (length: " + rawReply.length + ") ===");
+              console.log(rawReply.substring(0, 3000));
+              console.log("=== END RESPONSE ===");
+
+              // Parse JSON from response (handle markdown code blocks, trailing text)
+              try {
+                let jsonStr = rawReply.trim();
+                // Try code block first
+                const codeBlockMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+                if (codeBlockMatch) {
+                  jsonStr = codeBlockMatch[1].trim();
+                } else {
+                  // Try to extract JSON object from surrounding text
+                  const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
+                  if (jsonMatch) {
+                    jsonStr = jsonMatch[0];
+                  }
+                }
+                parsed = JSON.parse(jsonStr);
+              } catch (e) {
+                lastError = "JSON parse: " + e.message + " | raw: " + rawReply.substring(0, 200);
+                console.error("Attempt " + attempt + " failed: " + lastError);
+                await new Promise(r => setTimeout(r, 5000 * attempt));
+                continue;
+              }
+
+              if (!parsed.edits || parsed.edits.length === 0) {
+                lastError = "no edits in response: " + JSON.stringify(parsed).substring(0, 300);
+                console.error("Attempt " + attempt + " failed: " + lastError);
+                parsed = null;
+                await new Promise(r => setTimeout(r, 5000 * attempt));
+                continue;
+              }
+
+              break; // 성공
+            }
+
+            if (!parsed) {
+              core.setFailed("Nous API failed after 3 attempts: " + lastError);
               return;
             }
 
-            if (!parsed.edits || parsed.edits.length === 0) {
-              core.setFailed("No edits in AI response: " + JSON.stringify(parsed).substring(0, 500));
-              return;
-            }
-
-            core.setOutput("plan", JSON.stringify(parsed));
+            // base64 인코딩으로 출력해 셸 특수문자(따옴표/백틱/$) 문제 원천 차단
+            core.setOutput("plan_b64", Buffer.from(JSON.stringify(parsed)).toString("base64"));
         env:
           NOUS_API_KEY: ${{ secrets.NOUS_API_KEY }}
 
       - name: Apply edits (/oc)
-        if: steps.api-oc.outputs.plan
+        if: steps.api-oc.outputs.plan_b64
         shell: bash
         run: |
-          echo "Plan: $PLAN"
+          # base64 디코딩해 파일로 저장 (셸 특수문자 문제 원천 차단)
+          echo "$PLAN_B64" | base64 -d > plan.json
+          echo "Plan: $(cat plan.json)"
 
-          # Apply each edit using node
           node -e "
-            const plan = JSON.parse(process.env.PLAN);
             const fs = require('fs');
+            const plan = JSON.parse(fs.readFileSync('plan.json', 'utf8'));
 
             for (const edit of plan.edits) {
               const content = fs.readFileSync(edit.file, 'utf8');
@@ -253,14 +276,15 @@ jobs:
             console.log('All edits applied successfully');
           "
         env:
-          PLAN: ${{ steps.api-oc.outputs.plan }}
+          PLAN_B64: ${{ steps.api-oc.outputs.plan_b64 }}
 
       - name: Create branch and commit (/oc)
-        if: steps.api-oc.outputs.plan
+        if: steps.api-oc.outputs.plan_b64
         id: branch-oc
         shell: bash
         run: |
-          BRANCH=$(node -e "console.log(JSON.parse(process.env.PLAN).branch || 'oc-fix-$(date +%s)')")
+          echo "$PLAN_B64" | base64 -d > plan.json
+          BRANCH=$(node -e "console.log(JSON.parse(require('fs').readFileSync('plan.json','utf8')).branch || 'oc-fix-$(date +%s)')")
           echo "branch=$BRANCH" >> $GITHUB_OUTPUT
 
           git config user.name "github-actions[bot]"
@@ -273,7 +297,7 @@ jobs:
           Branch: $BRANCH"
           git push origin "$BRANCH"
         env:
-          PLAN: ${{ steps.api-oc.outputs.plan }}
+          PLAN_B64: ${{ steps.api-oc.outputs.plan_b64 }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create PR (/oc)
@@ -281,7 +305,7 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const plan = JSON.parse(process.env.PLAN);
+            const plan = JSON.parse(Buffer.from(process.env.PLAN_B64, "base64").toString("utf8"));
             const branch = process.env.BRANCH;
             const isIssue = !!context.payload.issue;
             const number = isIssue
@@ -315,7 +339,7 @@ jobs:
               body: "🤖 OpenCode created PR #" + pr.data.number + " on branch `" + branch + "`\n\n" + (plan.explanation || ""),
             });
         env:
-          PLAN: ${{ steps.api-oc.outputs.plan }}
+          PLAN_B64: ${{ steps.api-oc.outputs.plan_b64 }}
           BRANCH: ${{ steps.branch-oc.outputs.branch }}
 
   cc:
@@ -433,94 +457,123 @@ jobs:
 
             const userPrompt = "User request:\n\n\"" + commentBody + "\"\n\nReturn the JSON edit plan.";
 
-            // 524 Timeout 방지: 무료 모델은 응답이 느리므로 290초까지 대기
-            const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 290000);
+            // --- Nous API 호출 (3회 재시도) ---
+            // 무료 모델은 524 타임아웃/일시적 오류가 잦으므로 재시도 루프 적용
+            let parsed = null;
+            let lastError = "";
 
-            let res;
-            try {
-              res = await fetch(
-                "https://inference-api.nousresearch.com/v1/chat/completions",
-                {
-                  method: "POST",
-                  headers: {
-                    Authorization: "Bearer " + process.env.NOUS_API_KEY,
-                    "Content-Type": "application/json",
-                  },
-                  body: JSON.stringify({
-                    model: "poolside/laguna-s-2.1:free",
-                    messages: [
-                      { role: "system", content: systemPrompt },
-                      { role: "user", content: userPrompt },
-                    ],
-                    max_tokens: 16384,
-                    temperature: 0.3,
-                  }),
-                  signal: controller.signal,
-                }
-              );
-            } catch (e) {
-              clearTimeout(timeout);
-              core.setFailed("Nous API timeout/error: " + e.message);
-              return;
-            }
-            clearTimeout(timeout);
+            for (let attempt = 1; attempt <= 3; attempt++) {
+              console.log("--- Nous API attempt " + attempt + "/3 ---");
 
-            if (!res.ok) {
-              const err = await res.text();
-              core.setFailed("Nous API error " + res.status + ": " + err);
-              return;
-            }
+              const controller = new AbortController();
+              const timeout = setTimeout(() => controller.abort(), 290000);
 
-            const data = await res.json();
-            const msg = data.choices && data.choices[0] && data.choices[0].message;
-            let rawReply = (msg && msg.content) || "";
-
-            // content가 비어 있으면 reasoning_content에서 JSON 블록 추출 시도
-            if (!rawReply.trim() && msg && msg.reasoning_content) {
-              const rc = msg.reasoning_content;
-              const m = rc.match(/\{[\s\S]*\}/);
-              if (m) rawReply = m[0];
-            }
-
-            let parsed;
-            try {
-              let jsonStr = rawReply.trim();
-              // Try code block first
-              const codeBlockMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
-              if (codeBlockMatch) {
-                jsonStr = codeBlockMatch[1].trim();
-              } else {
-                // Try to extract JSON object from surrounding text
-                const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
-                if (jsonMatch) {
-                  jsonStr = jsonMatch[0];
-                }
+              let res;
+              try {
+                res = await fetch(
+                  "https://inference-api.nousresearch.com/v1/chat/completions",
+                  {
+                    method: "POST",
+                    headers: {
+                      Authorization: "Bearer " + process.env.NOUS_API_KEY,
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                      model: "poolside/laguna-s-2.1:free",
+                      messages: [
+                        { role: "system", content: systemPrompt },
+                        { role: "user", content: userPrompt },
+                      ],
+                      max_tokens: 16384,
+                      temperature: 0.3,
+                    }),
+                    signal: controller.signal,
+                  }
+                );
+              } catch (e) {
+                clearTimeout(timeout);
+                lastError = "network/timeout: " + e.message;
+                console.error("Attempt " + attempt + " failed: " + lastError);
+                await new Promise(r => setTimeout(r, 5000 * attempt));
+                continue;
               }
-              parsed = JSON.parse(jsonStr);
-            } catch (e) {
-              core.setFailed("Failed to parse JSON from AI response: " + rawReply.substring(0, 500));
+              clearTimeout(timeout);
+
+              console.log("Nous API status: " + res.status);
+
+              if (!res.ok) {
+                const err = await res.text();
+                lastError = "HTTP " + res.status + ": " + err.substring(0, 300);
+                console.error("Attempt " + attempt + " failed: " + lastError);
+                await new Promise(r => setTimeout(r, 5000 * attempt));
+                continue;
+              }
+
+              const data = await res.json();
+              const msg = data.choices && data.choices[0] && data.choices[0].message;
+              let rawReply = (msg && msg.content) || "";
+
+              // content가 비어 있으면 reasoning_content에서 JSON 블록 추출 시도
+              if (!rawReply.trim() && msg && msg.reasoning_content) {
+                const rc = msg.reasoning_content;
+                const m = rc.match(/\{[\s\S]*\}/);
+                if (m) rawReply = m[0];
+              }
+
+              console.log("=== RAW AI RESPONSE (length: " + rawReply.length + ") ===");
+              console.log(rawReply.substring(0, 3000));
+              console.log("=== END RESPONSE ===");
+
+              try {
+                let jsonStr = rawReply.trim();
+                const codeBlockMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+                if (codeBlockMatch) {
+                  jsonStr = codeBlockMatch[1].trim();
+                } else {
+                  const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
+                  if (jsonMatch) {
+                    jsonStr = jsonMatch[0];
+                  }
+                }
+                parsed = JSON.parse(jsonStr);
+              } catch (e) {
+                lastError = "JSON parse: " + e.message + " | raw: " + rawReply.substring(0, 200);
+                console.error("Attempt " + attempt + " failed: " + lastError);
+                await new Promise(r => setTimeout(r, 5000 * attempt));
+                continue;
+              }
+
+              if (!parsed.edits || parsed.edits.length === 0) {
+                lastError = "no edits in response: " + JSON.stringify(parsed).substring(0, 300);
+                console.error("Attempt " + attempt + " failed: " + lastError);
+                parsed = null;
+                await new Promise(r => setTimeout(r, 5000 * attempt));
+                continue;
+              }
+
+              break; // 성공
+            }
+
+            if (!parsed) {
+              core.setFailed("Nous API failed after 3 attempts: " + lastError);
               return;
             }
 
-            if (!parsed.edits || parsed.edits.length === 0) {
-              core.setFailed("No edits in AI response: " + JSON.stringify(parsed).substring(0, 500));
-              return;
-            }
-
-            core.setOutput("plan", JSON.stringify(parsed));
+            // base64 인코딩으로 출력해 셸 특수문자(따옴표/백틱/$) 문제 원천 차단
+            core.setOutput("plan_b64", Buffer.from(JSON.stringify(parsed)).toString("base64"));
         env:
           NOUS_API_KEY: ${{ secrets.NOUS_API_KEY }}
 
       - name: Apply edits (/cc)
-        if: steps.api-cc.outputs.plan
+        if: steps.api-cc.outputs.plan_b64
         shell: bash
         run: |
-          echo "Plan: $PLAN"
+          echo "$PLAN_B64" | base64 -d > plan.json
+          echo "Plan: $(cat plan.json)"
 
           node -e "
-            const plan = JSON.parse(process.env.PLAN);
             const fs = require('fs');
+            const plan = JSON.parse(fs.readFileSync('plan.json', 'utf8'));
 
             for (const edit of plan.edits) {
               const content = fs.readFileSync(edit.file, 'utf8');
@@ -536,14 +589,15 @@ jobs:
             console.log('All edits applied successfully');
           "
         env:
-          PLAN: ${{ steps.api-cc.outputs.plan }}
+          PLAN_B64: ${{ steps.api-cc.outputs.plan_b64 }}
 
       - name: Create branch and commit (/cc)
-        if: steps.api-cc.outputs.plan
+        if: steps.api-cc.outputs.plan_b64
         id: branch-cc
         shell: bash
         run: |
-          BRANCH=$(node -e "console.log(JSON.parse(process.env.PLAN).branch || 'cc-fix-$(date +%s)')")
+          echo "$PLAN_B64" | base64 -d > plan.json
+          BRANCH=$(node -e "console.log(JSON.parse(require('fs').readFileSync('plan.json','utf8')).branch || 'cc-fix-$(date +%s)')")
           echo "branch=$BRANCH" >> $GITHUB_OUTPUT
 
           git config user.name "github-actions[bot]"
@@ -556,7 +610,7 @@ jobs:
           Branch: $BRANCH"
           git push origin "$BRANCH"
         env:
-          PLAN: ${{ steps.api-cc.outputs.plan }}
+          PLAN_B64: ${{ steps.api-cc.outputs.plan_b64 }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create PR (/cc)
@@ -564,7 +618,7 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const plan = JSON.parse(process.env.PLAN);
+            const plan = JSON.parse(Buffer.from(process.env.PLAN_B64, "base64").toString("utf8"));
             const branch = process.env.BRANCH;
             const isIssue = !!context.payload.issue;
             const number = isIssue
@@ -598,5 +652,5 @@ jobs:
               body: "🤖 Claude Code created PR #" + pr.data.number + " on branch `" + branch + "`\n\n" + (plan.explanation || ""),
             });
         env:
-          PLAN: ${{ steps.api-cc.outputs.plan }}
+          PLAN_B64: ${{ steps.api-cc.outputs.plan_b64 }}
           BRANCH: ${{ steps.branch-cc.outputs.branch }}

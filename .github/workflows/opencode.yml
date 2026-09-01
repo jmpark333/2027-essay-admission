@@ -225,7 +225,6 @@ jobs:
         if: steps.api-oc.outputs.plan
         shell: bash
         run: |
-          PLAN='${{ steps.api-oc.outputs.plan }}'
           echo "Plan: $PLAN"
 
           # Apply each edit using node
@@ -254,7 +253,6 @@ jobs:
         id: branch-oc
         shell: bash
         run: |
-          PLAN='${{ steps.api-oc.outputs.plan }}'
           BRANCH=$(node -e "console.log(JSON.parse(process.env.PLAN).branch || 'oc-fix-$(date +%s)')")
           echo "branch=$BRANCH" >> $GITHUB_OUTPUT
 
@@ -504,7 +502,6 @@ jobs:
         if: steps.api-cc.outputs.plan
         shell: bash
         run: |
-          PLAN='${{ steps.api-cc.outputs.plan }}'
           echo "Plan: $PLAN"
 
           node -e "
@@ -532,7 +529,6 @@ jobs:
         id: branch-cc
         shell: bash
         run: |
-          PLAN='${{ steps.api-cc.outputs.plan }}'
           BRANCH=$(node -e "console.log(JSON.parse(process.env.PLAN).branch || 'cc-fix-$(date +%s)')")
           echo "branch=$BRANCH" >> $GITHUB_OUTPUT
 

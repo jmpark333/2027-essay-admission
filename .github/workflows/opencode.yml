@@ -76,6 +76,12 @@ jobs:
               indexHtml = "(index.html not found)";
             }
 
+            // CSS를 제외하고 실제 데이터(HTML body + JS)만 추출해 프롬프트 크기 절감
+            // CSS(<style>~</style>)는 편집 대상이 아니므로 잘라냄
+            const bodyStart = indexHtml.indexOf("<body>");
+            let contentForPrompt = bodyStart >= 0 ? indexHtml.substring(bodyStart) : indexHtml;
+            contentForPrompt = contentForPrompt.replace(/<style>[\s\S]*?<\/style>/g, "[CSS 생략]");
+
             const systemPrompt = [
               "You are a code-editing bot for the GitHub repository \"" + context.repo.owner + "/" + context.repo.repo + "\".",
               "",
@@ -96,8 +102,8 @@ jobs:
               fileList,
               "",
               "CURRENT INDEX.HTML CONTENT:",
-              indexHtml.substring(0, 5000),
-              indexHtml.length > 5000 ? "\n...[truncated, total " + indexHtml.length + " chars]" : "",
+              contentForPrompt.substring(0, 8000),
+              contentForPrompt.length > 8000 ? "\n...[truncated, total " + contentForPrompt.length + " chars]" : "",
               "",
               "YOUR TASK:",
               "The user wants to fix or modify data/code in this repo.",
@@ -117,7 +123,8 @@ jobs:
               "}",
               "",
               "RULES:",
-              "- \"old\" must match the EXACT text in the file (copy-paste friendly)",
+              "- \"old\" must match the EXACT text shown in CURRENT INDEX.HTML CONTENT above (copy-paste from it, do NOT guess or reconstruct)",
+              "- NEVER invent or guess the \"old\" text. If the target text is not in CURRENT INDEX.HTML CONTENT, do NOT make up an edit — report in explanation that the content is truncated",
               "- If multiple changes, include multiple objects in \"edits\" array",
               "- Keep \"old\" as short as possible but unique within the file",
               "- branch name: short, descriptive, kebab-case (e.g. \"fix-hanyang-date\")",
@@ -369,6 +376,12 @@ jobs:
               indexHtml = "(index.html not found)";
             }
 
+            // CSS를 제외하고 실제 데이터(HTML body + JS)만 추출해 프롬프트 크기 절감
+            // CSS(<style>~</style>)는 편집 대상이 아니므로 잘라냄
+            const bodyStart = indexHtml.indexOf("<body>");
+            let contentForPrompt = bodyStart >= 0 ? indexHtml.substring(bodyStart) : indexHtml;
+            contentForPrompt = contentForPrompt.replace(/<style>[\s\S]*?<\/style>/g, "[CSS 생략]");
+
             const systemPrompt = [
               "You are a code-editing bot for the GitHub repository \"" + context.repo.owner + "/" + context.repo.repo + "\".",
               "",
@@ -389,8 +402,8 @@ jobs:
               fileList,
               "",
               "CURRENT INDEX.HTML CONTENT:",
-              indexHtml.substring(0, 5000),
-              indexHtml.length > 5000 ? "\n...[truncated, total " + indexHtml.length + " chars]" : "",
+              contentForPrompt.substring(0, 8000),
+              contentForPrompt.length > 8000 ? "\n...[truncated, total " + contentForPrompt.length + " chars]" : "",
               "",
               "YOUR TASK:",
               "The user wants to fix or modify data/code in this repo.",
@@ -410,7 +423,8 @@ jobs:
               "}",
               "",
               "RULES:",
-              "- \"old\" must match the EXACT text in the file (copy-paste friendly)",
+              "- \"old\" must match the EXACT text shown in CURRENT INDEX.HTML CONTENT above (copy-paste from it, do NOT guess or reconstruct)",
+              "- NEVER invent or guess the \"old\" text. If the target text is not in CURRENT INDEX.HTML CONTENT, do NOT make up an edit — report in explanation that the content is truncated",
               "- If multiple changes, include multiple objects in \"edits\" array",
               "- Keep \"old\" as short as possible but unique within the file",
               "- branch name: short, descriptive, kebab-case",

@@ -1,6 +1,6 @@
 # JOB.md — OpenCode/Claude Code 자동화 워크플로우
 
-> GitHub 이슈 코멘트 `/oc` 또는 `/cc` → AI 분석 → 파일 수정 → PR 생성
+> GitHub 이슈 코멘트 `/oc` 또는 `/cc` → AI 분석 → 파일 수정 → PR 생성 → 수동 승인 → 배포
 
 ---
 
@@ -13,32 +13,47 @@
 | AI 모델 | `big-pickle` (OpenCode Zen, 무료) |
 | API 엔드포인트 | `https://opencode.ai/zen/v1/chat/completions` |
 | API 키 | `secrets.ZEN_API_KEY` |
-| 모델 최대 출력 | 128K (131,072 토큰) |
+| 상태 | ✅ **정상 동작 확인** (테마 변경 PR 2건 병합 완료) |
 
 ---
 
-## 🔧 완료된 작업
+## ✅ 동작 방식
 
-### 1. 워크플로우 구조 (양호)
+1. **이슈/PR에 `/oc` 또는 `/cc` 코멘트 작성**
+2. **AI 분석**: 파일 목록 + `index.html` 전체 내용 주입 → JSON 편집 계획 생성
+3. **파일 편집**: `plan.json` 기반 search/replace 적용
+4. **브랜치 생성 + 커밋 + 푸시**
+5. **PR 자동 생성** (+ 이슈에 PR 링크 코멘트)
+6. **사용자가 PR 승인/병합** → main 반영 → Vercel 자동 배포
+
+> ⚠️ main 반영(merge)은 **항상 사용자가 직접 승인**. AI가 브랜치/PR 생성까지만 자동 수행.
+
+---
+
+## 🔧 워크플로우 구조
+
 - **트리거**: `issue_comment` 생성 시 `/oc`, `/opencode`, `/cc` 명령어 감지
-- **Job 구성**: `oc` (OpenCode) + `cc` (Claude Code) 두 개 Job
+- **Job 구성**: `oc` + `cc` 두 개 (동일 로직, 명령어만 다름)
 - **Step 순서**:
   1. `actions/checkout@v4` — 레포 체크아웃
   2. `actions/github-script@v7` — 👀 eyes 리액션
-  3. `actions/github-script@v7` — Nous API 호출 (파일 목록 + index.html 컨텍스트 포함)
-  4. `bash` + `node` — AI 응답 기반 파일 편집 (search/replace)
+  3. `actions/github-script@v7` — Zen API 호출 (3회 재시도 + 응답 검증)
+  4. `bash` + `node` — AI 응답(base64) → `plan.json` → 파일 편집
   5. `bash` — 브랜치 생성, 커밋, 푸시
   6. `actions/github-script@v7` — PR 생성 + 코멘트 알림
 
-### 2. 시스템 프롬프트 (양호)
+### 시스템 프롬프트 핵심
 - 레포 설명: 2027학년도 논술전형 달력
 - 데이터 구조: `events.deadlines[]`, `events.exams[]`, `events.results[]`
-- 파일 목록 자동 주입 (GitHub API `getContent`)
-- index.html 내용 8000자 주입
+- 파일 목록 + **index.html 전체 내용 주입** (28KB, 잘라내기 없음)
 - 응답 형식: JSON `{explanation, branch, edits[{file, old, new}]}`
 - 대학명 규칙: 짧은 형태 + 따옴표 (`'한양대'` NOT `'한양대학교'`)
+- RULES: "전체 파일 제공, 편집 거부 금지", "old는 프롬프트의 정확한 텍스트만 사용"
 
-### 3. API 호출 설정 (수정 완료, 미검증)
+---
+
+## 📚 API 설정
+
 ```javascript
 {
   model: "big-pickle",
@@ -51,56 +66,36 @@
 
 ---
 
-## ✅ 수정 완료 (검증 대기 중)
+## 🛠️ 수정 이력 (문제 해결 과정)
 
-### 문제: 빈 응답 (Empty Response)
-**증상:**
-```
-Nous API status: 200
-{
-  "choices": [{
-    "finish_reason": "length",
-    "message": {
-      "content": null,
-      "reasoning_content": "..."  // 모든 토큰이 reasoning에 소모
-    }
-  }]
-}
-```
+### 1. 모델/API 전환: Nous Research → OpenCode Zen
+- `meituan/longcat-2.0:free`: `reasoning_effort: "high"` 시 토큰을 reasoning에 소모, `content: null` → JSON 파싱 실패
+- `stepfun/step-3.7-flash:free`: reasoning이 **mandatory** → `missing tags` 400 에러
+- `poolside/laguna-s-2.1:free`: 524 타임아웃 / 429 용량 초과 지속
+- **`big-pickle` (OpenCode Zen)**: ✅ 정상 동작 — 200 응답, `finish_reason: "stop"`
 
-**원인:**
-- `meituan/longcat-2.0:free` 모델이 `reasoning_effort: "high"` 설정 시 내부 reasoning에 모든 토큰 소모
-- `content`가 null로 반환되어 JSON 파싱 실패 (`Unexpected end of JSON input`)
+### 2. 안정성 개선
+- **3회 재시도 루프**: 524/429/JSON 파싱 실패 시 5초·10초·15초 간격 자동 재시도
+- **base64 전달**: AI 응답 JSON을 base64 인코딩해 스텝 간 전달 → 홑따옴표/백틱/`$` 특수문자 문제 원천 차단 (`'밝은: command not found'` 해결)
+- **plan.json 파일 기반**: 스텝 간 데이터 공유 안정화
+- **Node 20 deprecation 경고 해결**: `ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true`
+- **reasoning_content fallback**: content가 비어 있으면 reasoning에서 JSON 추출
 
-**수정 내용:**
-- 모델/API 변경: Nous Research → **OpenCode Zen**
-  - `meituan/longcat-2.0:free`, `stepfun/step-3.7-flash:free`, `poolside/laguna-s-2.1:free` 모두 524/429 오류 지속
-  - `big-pickle` (OpenCode Zen, 무료)로 전환 — 엔드포인트 `https://opencode.ai/zen/v1/chat/completions`
-- `reasoning_effort: "high"` 제거 (longcat에서 content null 문제)
-- `content`가 비어 있을 때 `reasoning_content`에서 JSON 추출하는 fallback 추가
-- cc job도 oc job과 동일한 견고한 JSON 파싱 로직(코드블록 + JSON 추출)으로 통일
-- Node 20 deprecation 경고 해결 (`ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true`)
-- Nous API 3회 재시도 + base64 전달 (524 타임아웃/특수문자 문제 대응)
+### 3. 프롬프트 개선
+- **index.html 전체 주입**: 8000자 잘라내기 → 전체 28KB (AI가 "truncated"라며 편집 거부하던 문제 해결)
+- **CSS 생략 제거**: `<style>` 블록까지 포함해야 테마/스타일 편집 가능
+- **RULES 강화**: "편집 거부 금지", "old는 정확한 텍스트만"
 
-**검증 방법:**
-1. 이슈에 `/oc 테스트` 코멘트 작성
-2. Actions 로그에서:
-   - `Nous API status: 200` 확인
-   - `finish_reason: "stop"` 확인 (기존: `"length"`)
-   - `content`에 JSON 응답 있는지 확인
-   - 파일 편집 → 브랜치 생성 → PR 생성까지 정상 동작 확인
+### 4. 권한 설정
+- **PR 생성 권한**: GitHub 리포지토리 설정에서 `can_approve_pull_request_reviews: true`로 변경 (Actions가 PR 생성 못 하던 문제)
 
 ---
 
-## 📋 향후 확인 체크리스트
+## 📋 현재 제약 사항
 
-- [ ] `/oc` 명령어 정상 동작 (파일 수정 + PR 생성)
-- [ ] `/cc` 명령어 정상 동작 (동일 확인)
-- [ ] AI가 정확한 파일 내용 인식 (대학명 짧은 형태, 날짜 형식)
-- [ ] JSON 파싱 성공 (markdown code block 처리 포함)
-- [ ] 파일 편집 시 `old` 텍스트 매칭 성공
-- [ ] PR 본문에 변경 요약 포함
-- [ ] 코멘트에 PR 링크 알림
+- **편집 대상**: `index.html` 단일 파일 (파일 목록/내용은 주입되지만 `edits[]`가 기존 파일 치환만 지원)
+- **새 파일 생성 불가**: `create` 타입 미지원
+- **PR 승인**: 수동 (자동 merge 아님)
 
 ---
 
@@ -108,8 +103,8 @@ Nous API status: 200
 
 - Actions 로그: https://github.com/jmpark333/2027-essay-admission/actions
 - 워크플로우 파일: `.github/workflows/opencode.yml`
-- 대상 파일: `index.html` (696줄, 이벤트 데이터 포함)
+- 대상 파일: `index.html`
 
 ---
 
-*최종 수정: 2026-09-01 01:00 KST*
+*최종 수정: 2026-09-01 (ZEN API 전환 + /oc 정상 동작 확인)*

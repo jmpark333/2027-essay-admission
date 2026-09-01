@@ -347,6 +347,27 @@ tbody tr:last-child td { border-bottom: none; }
 .badge-have { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
 .badge-partial { background: rgba(99, 102, 241, 0.15); color: #818cf8; }
 
+/* Light theme overrides */
+body.light {
+  --bg: #f5f6fa;
+  --surface: #ffffff;
+  --surface-alt: #eef0f5;
+  --border: #d1d5db;
+  --text: #1f2937;
+  --text-muted: #6b7280;
+  --accent: #4f46e5;
+  --accent-soft: rgba(79, 70, 229, 0.1);
+  --danger: #dc2626;
+  --success: #16a34a;
+  --warning: #d97706;
+}
+body.light .cal-tooltip {
+  background: #ffffff;
+  color: #1f2937;
+  border-color: #d1d5db;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   body { padding: 1rem 0.75rem; }
@@ -374,6 +395,7 @@ tbody tr:last-child td { border-bottom: none; }
 </style>
 </head>
 <body>
+<button id="themeToggle" style="position:fixed;top:1rem;right:1rem;z-index:1001;padding:0.5rem 0.9rem;border-radius:999px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.8rem;font-weight:600;cursor:pointer;transition:all 0.2s;box-shadow:0 2px 8px rgba(0,0,0,0.2);">🌙 다크</button>
 <div class="container">
   <header>
     <h1>2027학년도 논술전형 종합 가이드</h1>
@@ -730,6 +752,23 @@ buildCalendar();
 buildDetails();
 setupFilters();
 setupTooltips();
+
+/* Theme toggle */
+(function() {
+  const btn = document.getElementById('themeToggle');
+  const root = document.body;
+  const saved = localStorage.getItem('theme');
+  if (saved === 'light') {
+    root.classList.add('light');
+    btn.textContent = '☀️ 라이트';
+  }
+  btn.addEventListener('click', () => {
+    root.classList.toggle('light');
+    const isLight = root.classList.contains('light');
+    btn.textContent = isLight ? '☀️ 라이트' : '🌙 다크';
+    localStorage.setItem('theme', isLight ? 'light' : 'dark');
+  });
+})();
 
 /* ----- 캐시 재검증: 최신 버전과 다르면 자동 새로고침 ----- */
 (function() {

@@ -394,7 +394,7 @@ body.light .cal-tooltip {
 }
 </style>
 </head>
-<body>
+<body class="light">
 <button id="themeToggle" style="position:fixed;top:1rem;right:1rem;z-index:1001;padding:0.5rem 0.9rem;border-radius:999px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.8rem;font-weight:600;cursor:pointer;transition:all 0.2s;box-shadow:0 2px 8px rgba(0,0,0,0.2);">🌙 다크</button>
 <div class="container">
   <header>
@@ -758,7 +758,10 @@ setupTooltips();
   const btn = document.getElementById('themeToggle');
   const root = document.body;
   const saved = localStorage.getItem('theme');
-  if (saved === 'light') {
+  if (saved === 'dark') {
+    root.classList.remove('light');
+    btn.textContent = '🌙 다크';
+  } else {
     root.classList.add('light');
     btn.textContent = '☀️ 라이트';
   }

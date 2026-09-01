@@ -135,15 +135,13 @@ jobs:
                   "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                  model: "stepfun/step-3.7-flash:free",
+                  model: "poolside/laguna-s-2.1:free",
                   messages: [
                     { role: "system", content: systemPrompt },
                     { role: "user", content: userPrompt },
                   ],
                   max_tokens: 16384,
                   temperature: 0.3,
-                  // reasoning_effort 제거: high면 모든 토큰을 reasoning에 소모해
-                  // content가 null로 반환되어 JSON 파싱이 실패함 (finish_reason: length)
                 }),
               }
             );
@@ -419,15 +417,13 @@ jobs:
                   "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                  model: "stepfun/step-3.7-flash:free",
+                  model: "poolside/laguna-s-2.1:free",
                   messages: [
                     { role: "system", content: systemPrompt },
                     { role: "user", content: userPrompt },
                   ],
                   max_tokens: 16384,
                   temperature: 0.3,
-                  // reasoning_effort 제거: high면 모든 토큰을 reasoning에 소모해
-                  // content가 null로 반환되어 JSON 파싱이 실패함 (finish_reason: length)
                 }),
               }
             );

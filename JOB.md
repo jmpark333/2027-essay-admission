@@ -10,7 +10,7 @@
 |------|-----|
 | 레포지토리 | `jmpark333/2027-essay-admission` |
 | 워크플로우 파일 | `.github/workflows/opencode.yml` |
-| AI 모델 | `stepfun/step-3.7-flash:free` (Nous Research API) |
+| AI 모델 | `poolside/laguna-s-2.1:free` (Nous Research API) |
 | API 엔드포인트 | `https://inference-api.nousresearch.com/v1/chat/completions` |
 | API 키 | `secrets.NOUS_API_KEY` |
 | 모델 최대 출력 | 128K (131,072 토큰) |
@@ -41,10 +41,10 @@
 ### 3. API 호출 설정 (수정 완료, 미검증)
 ```javascript
 {
-  model: "stepfun/step-3.7-flash:free",
+  model: "poolside/laguna-s-2.1:free",
   max_tokens: 16384,        // 기존 2048 → 16384로 증가
   temperature: 0.3
-  // reasoning_effort 제거 (longcat-2.0에서 content null 문제 발생)
+  // reasoning 파라미터 불필요 (laguna는 reasoning mandatory 아님)
 }
 ```
 
@@ -72,8 +72,10 @@ Nous API status: 200
 - `content`가 null로 반환되어 JSON 파싱 실패 (`Unexpected end of JSON input`)
 
 **수정 내용:**
-- 모델 변경: `meituan/longcat-2.0:free` → `stepfun/step-3.7-flash:free` (코딩/에이전트 워크플로우 특화)
-- `reasoning_effort: "high"` 제거
+- 모델 변경: `meituan/longcat-2.0:free` → `poolside/laguna-s-2.1:free`
+  - `stepfun/step-3.7-flash:free` 시도 → reasoning mandatory라 "missing tags" 400 에러 발생
+  - `poolside/laguna-s-2.1:free`: 코딩 에이전트 특화, reasoning mandatory 아님 → 최종 채택
+- `reasoning_effort: "high"` 제거 (longcat에서 content null 문제)
 - `content`가 비어 있을 때 `reasoning_content`에서 JSON 추출하는 fallback 추가
 - cc job도 oc job과 동일한 견고한 JSON 파싱 로직(코드블록 + JSON 추출)으로 통일
 - Node 20 deprecation 경고 해결 (`ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true`)

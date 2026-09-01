@@ -96,8 +96,8 @@ jobs:
               fileList,
               "",
               "CURRENT INDEX.HTML CONTENT:",
-              indexHtml.substring(0, 8000),
-              indexHtml.length > 8000 ? "\n...[truncated, total " + indexHtml.length + " chars]" : "",
+              indexHtml.substring(0, 5000),
+              indexHtml.length > 5000 ? "\n...[truncated, total " + indexHtml.length + " chars]" : "",
               "",
               "YOUR TASK:",
               "The user wants to fix or modify data/code in this repo.",
@@ -126,25 +126,38 @@ jobs:
 
             const userPrompt = "User request:\n\n\"" + commentBody + "\"\n\nReturn the JSON edit plan.";
 
-            const res = await fetch(
-              "https://inference-api.nousresearch.com/v1/chat/completions",
-              {
-                method: "POST",
-                headers: {
-                  Authorization: "Bearer " + process.env.NOUS_API_KEY,
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  model: "poolside/laguna-s-2.1:free",
-                  messages: [
-                    { role: "system", content: systemPrompt },
-                    { role: "user", content: userPrompt },
-                  ],
-                  max_tokens: 16384,
-                  temperature: 0.3,
-                }),
-              }
-            );
+            // 524 Timeout 방지: 무료 모델은 응답이 느리므로 290초까지 대기
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 290000);
+
+            let res;
+            try {
+              res = await fetch(
+                "https://inference-api.nousresearch.com/v1/chat/completions",
+                {
+                  method: "POST",
+                  headers: {
+                    Authorization: "Bearer " + process.env.NOUS_API_KEY,
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    model: "poolside/laguna-s-2.1:free",
+                    messages: [
+                      { role: "system", content: systemPrompt },
+                      { role: "user", content: userPrompt },
+                    ],
+                    max_tokens: 16384,
+                    temperature: 0.3,
+                  }),
+                  signal: controller.signal,
+                }
+              );
+            } catch (e) {
+              clearTimeout(timeout);
+              core.setFailed("Nous API timeout/error: " + e.message);
+              return;
+            }
+            clearTimeout(timeout);
 
             console.log("Nous API status: " + res.status);
 
@@ -378,8 +391,8 @@ jobs:
               fileList,
               "",
               "CURRENT INDEX.HTML CONTENT:",
-              indexHtml.substring(0, 8000),
-              indexHtml.length > 8000 ? "\n...[truncated, total " + indexHtml.length + " chars]" : "",
+              indexHtml.substring(0, 5000),
+              indexHtml.length > 5000 ? "\n...[truncated, total " + indexHtml.length + " chars]" : "",
               "",
               "YOUR TASK:",
               "The user wants to fix or modify data/code in this repo.",
@@ -408,25 +421,38 @@ jobs:
 
             const userPrompt = "User request:\n\n\"" + commentBody + "\"\n\nReturn the JSON edit plan.";
 
-            const res = await fetch(
-              "https://inference-api.nousresearch.com/v1/chat/completions",
-              {
-                method: "POST",
-                headers: {
-                  Authorization: "Bearer " + process.env.NOUS_API_KEY,
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  model: "poolside/laguna-s-2.1:free",
-                  messages: [
-                    { role: "system", content: systemPrompt },
-                    { role: "user", content: userPrompt },
-                  ],
-                  max_tokens: 16384,
-                  temperature: 0.3,
-                }),
-              }
-            );
+            // 524 Timeout 방지: 무료 모델은 응답이 느리므로 290초까지 대기
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 290000);
+
+            let res;
+            try {
+              res = await fetch(
+                "https://inference-api.nousresearch.com/v1/chat/completions",
+                {
+                  method: "POST",
+                  headers: {
+                    Authorization: "Bearer " + process.env.NOUS_API_KEY,
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    model: "poolside/laguna-s-2.1:free",
+                    messages: [
+                      { role: "system", content: systemPrompt },
+                      { role: "user", content: userPrompt },
+                    ],
+                    max_tokens: 16384,
+                    temperature: 0.3,
+                  }),
+                  signal: controller.signal,
+                }
+              );
+            } catch (e) {
+              clearTimeout(timeout);
+              core.setFailed("Nous API timeout/error: " + e.message);
+              return;
+            }
+            clearTimeout(timeout);
 
             if (!res.ok) {
               const err = await res.text();

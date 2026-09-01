@@ -147,15 +147,15 @@ jobs:
               let res;
               try {
                 res = await fetch(
-                  "https://inference-api.nousresearch.com/v1/chat/completions",
+                  "https://opencode.ai/zen/v1/chat/completions",
                   {
                     method: "POST",
                     headers: {
-                      Authorization: "Bearer " + process.env.NOUS_API_KEY,
+                      Authorization: "Bearer " + process.env.ZEN_API_KEY,
                       "Content-Type": "application/json",
                     },
                     body: JSON.stringify({
-                      model: "poolside/laguna-s-2.1:free",
+                      model: "big-pickle",
                       messages: [
                         { role: "system", content: systemPrompt },
                         { role: "user", content: userPrompt },
@@ -248,7 +248,7 @@ jobs:
             // base64 인코딩으로 출력해 셸 특수문자(따옴표/백틱/$) 문제 원천 차단
             core.setOutput("plan_b64", Buffer.from(JSON.stringify(parsed)).toString("base64"));
         env:
-          NOUS_API_KEY: ${{ secrets.NOUS_API_KEY }}
+          ZEN_API_KEY: ${{ secrets.ZEN_API_KEY }}
 
       - name: Apply edits (/oc)
         if: steps.api-oc.outputs.plan_b64
@@ -471,15 +471,15 @@ jobs:
               let res;
               try {
                 res = await fetch(
-                  "https://inference-api.nousresearch.com/v1/chat/completions",
+                  "https://opencode.ai/zen/v1/chat/completions",
                   {
                     method: "POST",
                     headers: {
-                      Authorization: "Bearer " + process.env.NOUS_API_KEY,
+                      Authorization: "Bearer " + process.env.ZEN_API_KEY,
                       "Content-Type": "application/json",
                     },
                     body: JSON.stringify({
-                      model: "poolside/laguna-s-2.1:free",
+                      model: "big-pickle",
                       messages: [
                         { role: "system", content: systemPrompt },
                         { role: "user", content: userPrompt },
@@ -562,7 +562,7 @@ jobs:
             // base64 인코딩으로 출력해 셸 특수문자(따옴표/백틱/$) 문제 원천 차단
             core.setOutput("plan_b64", Buffer.from(JSON.stringify(parsed)).toString("base64"));
         env:
-          NOUS_API_KEY: ${{ secrets.NOUS_API_KEY }}
+          ZEN_API_KEY: ${{ secrets.ZEN_API_KEY }}
 
       - name: Apply edits (/cc)
         if: steps.api-cc.outputs.plan_b64
